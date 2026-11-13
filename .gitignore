@@ -1,0 +1,116 @@
+# ==============================================================================
+# Git Ignore: Publish Only Agent Skills, Code, Docs & Example Prompts
+# Strictly Exclude All Running Data, EDA Databases, Logs & Confidential Assets
+# ==============================================================================
+
+# 1. EDA Package / Substrate Layout & Simulation Databases (Running Data)
+*.mcm
+*.spd
+*.brd
+*.sip
+*.dsn
+*.dra
+*.psm
+*.pad
+*.bsm
+*.osm
+*.ssm
+*.fsm
+*.iml
+*.iml,*
+*.lck
+*.db
+*.cdb
+*.sav
+*.sim
+signoise.run/
+pcbenv/
+mcm/
+MCM/
+mcm_designs/
+cadence_extract/
+
+# 2. Extracted Geometry Dumps, Netlists, Reports & Runtime Logs
+*_dump.txt
+*netlist*.txt
+*Ploc*.txt
+*.log
+*.log,*
+*.rpt
+*.raw
+*.bak
+*.tmp
+*.out
+*.err
+*.trc
+*.prof
+logs/
+logs.json
+tool-outputs/
+chats/
+scratch/
+sandbox/
+tmp/
+temp/
+output/
+outputs/
+results/
+gas_deploy/
+published_repos/
+
+# 3. Proprietary Specs, Spreadsheets, Customer Data & Raw CSVs
+*.xlsx
+*.xls
+*.xlsm
+*.pdf
+*.docx
+*.pptx
+*.csv
+*.tsv
+!examples/*.csv
+!examples/*.tsv
+!examples/*.txt
+
+# 4. Large Generated SVGs / Archives (Keep only curated examples/docs SVGs)
+*.svg.gz
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.rar
+*.skill
+
+# 5. Credentials, Secrets, Tokens & Local Environment Configs
+.env
+.env.*
+*secret*
+*credential*
+*token*.json
+client_secret*.json
+service_account*.json
+.clasp.json
+.firebaserc
+.project_root
+
+# 6. Python, Node & Tooling Caches / Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+node_modules/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 7. OS & Editor Artifacts
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

@@ -1,0 +1,66 @@
+{
+  "source_dump": "HH_Nguyen_2026-1023_1900_TO_v8_dump.txt",
+  "die_family": "HBM4E_MICRON_NOMINAL_BC_A0",
+  "total_hbm_sites": 12,
+  "hbm_12site_channel_map": {
+    "U13": { "ch": "5", "center_um": [-37465.57,  27687.499], "rot_deg": 180.0, "mirror": "YES", "bbox_um": [-44553.07,  22199.999, -30378.07,  33174.999], "lava_emib": "U41", "host_ldb": "U5", "edtc_vddc_48p": "C2258", "edtc_vddq_24p": "C2257", "rails": ["VDDQ_0P85_HBM_MEM5", "VDDC_1P0_HBM_MEM5", "VDDQL5", "VPP_1P8_HBM_MEM5"] },
+    "U14": { "ch": "4", "center_um": [-37465.57,  16612.488], "rot_deg": 180.0, "mirror": "YES", "bbox_um": [-44553.07,  11124.988, -30378.07,  22099.988], "lava_emib": "U42", "host_ldb": "U5", "edtc_vddc_48p": "C2256", "edtc_vddq_24p": "C2255", "rails": ["VDDQ_0P85_HBM_MEM4", "VDDC_1P0_HBM_MEM4", "VDDQL4", "VPP_1P8_HBM_MEM4"] },
+    "U15": { "ch": "3", "center_um": [-37465.57,   5537.477], "rot_deg": 180.0, "mirror": "YES", "bbox_um": [-44553.07,     49.977, -30378.07,  11024.977], "lava_emib": "U43", "host_ldb": "U5", "edtc_vddc_48p": "C2254", "edtc_vddq_24p": "C2253", "rails": ["VDDQ_0P85_HBM_MEM3", "VDDC_1P0_HBM_MEM3", "VDDQL3", "VPP_1P8_HBM_MEM3"] },
+    "U16": { "ch": "B", "center_um": [-37465.57,  -5537.478], "rot_deg": 180.0, "mirror": "YES", "bbox_um": [-44553.07, -11024.978, -30378.07,    -49.978], "lava_emib": "U44", "host_ldb": "U6", "edtc_vddc_48p": "C2270", "edtc_vddq_24p": "C2269", "rails": ["VDDQ_0P85_HBM_MEMB", "VDDC_1P0_HBM_MEMB", "VDDQLB", "VPP_1P8_HBM_MEMB"] },
+    "U17": { "ch": "A", "center_um": [-37465.57, -16612.489], "rot_deg": 180.0, "mirror": "YES", "bbox_um": [-44553.07, -22099.989, -30378.07, -11124.989], "lava_emib": "U45", "host_ldb": "U6", "edtc_vddc_48p": "C2268", "edtc_vddq_24p": "C2267", "rails": ["VDDQ_0P85_HBM_MEMA", "VDDC_1P0_HBM_MEMA", "VDDQLA", "VPP_1P8_HBM_MEMA"] },
+    "U18": { "ch": "9", "center_um": [-37465.57, -27687.500], "rot_deg": 180.0, "mirror": "YES", "bbox_um": [-44553.07, -33175.000, -30378.07, -22200.000], "lava_emib": "U46", "host_ldb": "U6", "edtc_vddc_48p": "C2266", "edtc_vddq_24p": "C2265", "rails": ["VDDQ_0P85_HBM_MEM9", "VDDC_1P0_HBM_MEM9", "VDDQL9", "VPP_1P8_HBM_MEM9"] },
+    "U19": { "ch": "0", "center_um": [ 37465.57,  27687.500], "rot_deg":   0.0, "mirror": "YES", "bbox_um": [ 30378.07,  22200.000,  44553.07,  33175.000], "lava_emib": "U47", "host_ldb": "U7", "edtc_vddc_48p": "C2248", "edtc_vddq_24p": "C2247", "rails": ["VDDQ_0P85_HBM_MEM0", "VDDC_1P0_HBM_MEM0", "VDDQL0", "VPP_1P8_HBM_MEM0"] },
+    "U20": { "ch": "1", "center_um": [ 37465.57,  16612.489], "rot_deg":   0.0, "mirror": "YES", "bbox_um": [ 30378.07,  11124.989,  44553.07,  22099.989], "lava_emib": "U48", "host_ldb": "U7", "edtc_vddc_48p": "C2250", "edtc_vddq_24p": "C2249", "rails": ["VDDQ_0P85_HBM_MEM1", "VDDC_1P0_HBM_MEM1", "VDDQL1", "VPP_1P8_HBM_MEM1"] },
+    "U21": { "ch": "2", "center_um": [ 37465.57,   5537.478], "rot_deg":   0.0, "mirror": "YES", "bbox_um": [ 30378.07,     49.978,  44553.07,  11024.978], "lava_emib": "U49", "host_ldb": "U7", "edtc_vddc_48p": "C2252", "edtc_vddq_24p": "C2251", "rails": ["VDDQ_0P85_HBM_MEM2", "VDDC_1P0_HBM_MEM2", "VDDQL2", "VPP_1P8_HBM_MEM2"] },
+    "U22": { "ch": "6", "center_um": [ 37465.57,  -5537.477], "rot_deg":   0.0, "mirror": "YES", "bbox_um": [ 30378.07, -11024.977,  44553.07,    -49.977], "lava_emib": "U50", "host_ldb": "U8", "edtc_vddc_48p": "C2260", "edtc_vddq_24p": "C2259", "rails": ["VDDQ_0P85_HBM_MEM6", "VDDC_1P0_HBM_MEM6", "VDDQL6", "VPP_1P8_HBM_MEM6"] },
+    "U23": { "ch": "7", "center_um": [ 37465.57, -16612.488], "rot_deg":   0.0, "mirror": "YES", "bbox_um": [ 30378.07, -22099.988,  44553.07, -11124.988], "lava_emib": "U51", "host_ldb": "U8", "edtc_vddc_48p": "C2262", "edtc_vddq_24p": "C2261", "rails": ["VDDQ_0P85_HBM_MEM7", "VDDC_1P0_HBM_MEM7", "VDDQL7", "VPP_1P8_HBM_MEM7"] },
+    "U24": { "ch": "8", "center_um": [ 37465.57, -27687.499], "rot_deg":   0.0, "mirror": "YES", "bbox_um": [ 30378.07, -33174.999,  44553.07, -22199.999], "lava_emib": "U52", "host_ldb": "U8", "edtc_vddc_48p": "C2264", "edtc_vddq_24p": "C2263", "rails": ["VDDQ_0P85_HBM_MEM8", "VDDC_1P0_HBM_MEM8", "VDDQL8", "VPP_1P8_HBM_MEM8"] }
+  },
+  "u13_mem5_reference_learned_metrics": {
+    "u41_lava_emib_bridge": {
+      "refdes": "U41",
+      "symbol": "LAVA_BRIDGE_22_BC_A0",
+      "bbox_um": [-35795.933, 22484.866, -26676.362, 32118.588],
+      "overlap_with_u13_x_um": [-35795.933, -30378.07],
+      "csb_10f_padstack": "C77_10F_DP_01A",
+      "csb_10f_pin_counts": { "VSS": 1855, "VDDQL5": 588, "VDDQ_0P85_HBM_MEM5": 543, "VDD_0P75_HBMPHY_UC5": 430, "VDDC_1P0_HBM_MEM5": 54, "VPP_1P8_HBM_MEM5": 14, "OBS_VDDQL5": 1, "OBS_VDDQL5_VSS": 1 }
+    },
+    "surface_dual_zone_escape": {
+      "VDDQ_0P85_HBM_MEM5": { "u13_bumps": 3717, "over_u41": 1334, "west_of_u41": 2383, "u5_ldb_bumps": 65,  "vias_surface_to_c0": 1383, "vias_surface_to_12f": 337, "surface_gang_shapes": 48 },
+      "VDDC_1P0_HBM_MEM5":  { "u13_bumps": 2627, "over_u41": 208,  "west_of_u41": 2419, "u5_ldb_bumps": 0,   "vias_surface_to_c0": 160,  "vias_surface_to_12f": 614, "surface_gang_shapes": 72 },
+      "VDDQL5":             { "u13_bumps": 1476, "over_u41": 1010, "west_of_u41": 466,  "u5_ldb_bumps": 780, "vias_surface_to_c0": 1733, "vias_surface_to_12f": 81,  "surface_gang_shapes": 18 },
+      "VPP_1P8_HBM_MEM5":   { "u13_bumps": 774,  "over_u41": 122,  "west_of_u41": 652,  "u5_ldb_bumps": 0,   "vias_surface_to_c0": 67,   "vias_surface_to_12f": 80,  "surface_gang_shapes": 17 },
+      "VSS_on_u13":         { "u13_bumps": 5481, "over_u41": 1394, "west_of_u41": 4087, "vias_surface_to_c0_in_u13": 1316, "vias_surface_to_12f_in_u13": 704 }
+    },
+    "edtc_4fco_and_emib_clearances": {
+      "C2258_VDDC": { "symbol": "N24792-017_LIVE_BUG_4FCO_02A", "VDDC_pins": 24, "VSS_pins": 24, "sym_bbox_um": [-41135.8, 23175.0, -38815.8, 27145.0], "dx_to_u41_emib_die_um": 3019.9 },
+      "C2257_VDDQ": { "symbol": "N24792-016_LIVE_BUG_4FCO_02A", "VDDQ_pins": 12, "VSS_pins": 12, "sym_bbox_um": [-42000.5, 28764.0, -37270.5, 31689.0], "dx_to_u41_emib_die_um": 1474.6, "dx_pin_to_u41_die_um": 2654.6 }
+    },
+    "core_pth_and_concentric_pp_summary": {
+      "VDDQ_0P85_HBM_MEM5": { "core_pths": 114, "concentric_1via_pp": 114, "top_pp_padstack": "V282_5_85_175_4FCO_3FCI_01A", "bot_pp_padstack": "V175_85_282_5_3BCI_4BCO_01A" },
+      "VDDC_1P0_HBM_MEM5":  { "core_pths": 103, "concentric_1via_pp": 103, "top_pp_padstack": "V282_5_85_175_4FCO_3FCI_01A", "bot_pp_padstack": "V175_85_282_5_3BCI_4BCO_01A" },
+      "VDDQL5":             { "core_pths": 84,  "concentric_1via_pp": 84,  "top_pp_padstack": "V282_5_85_175_4FCO_3FCI_01A", "bot_pp_padstack": "V175_85_282_5_3BCI_4BCO_01A" },
+      "VPP_1P8_HBM_MEM5":   { "core_pths": 60,  "concentric_1via_pp": 60,  "top_pp_padstack": "V282_5_85_175_4FCO_3FCI_01A", "bot_pp_padstack": "V175_85_282_5_3BCI_4BCO_01A" },
+      "VSS_regional":       { "core_pths": 1085 }
+    },
+    "base_bga_lsc_and_recess_cavity": {
+      "bga_padstack": "C560_35_01B",
+      "VDDQ_0P85_HBM_MEM5": { "bga_count": 42, "vias_per_bga": 6, "bga_offsets_um": [[-45.0, -45.0], [-45.0, 45.0], [0.0, -123.0], [0.0, 123.0], [45.0, -45.0], [45.0, 45.0]], "lsc_0201_10uF_count": 11, "total_12b_base_vias": 285 },
+      "VDDC_1P0_HBM_MEM5":  { "bga_count": 36, "vias_per_bga": 4, "bga_offsets_um": [[-200.0, 0.0], [200.0, 0.0], [0.0, -200.0], [0.0, 200.0]], "lsc_0201_10uF_count": 16, "total_12b_base_vias": 192 },
+      "VDDQL5":             { "bga_count": 9,  "vias_per_bga": 4, "bga_offsets_um": [[-200.0, 0.0], [200.0, 0.0], [0.0, -200.0], [0.0, 200.0]], "lsc_0201_10uF_count": 6,  "total_12b_base_vias": 54 },
+      "VPP_1P8_HBM_MEM5":   { "bga_count": 8,  "vias_per_bga": 4, "bga_offsets_um": [[-200.0, 0.0], [200.0, 0.0], [0.0, -200.0], [0.0, 200.0]], "lsc_0201_10uF_count": 0,  "total_12b_base_vias": 32 },
+      "pocket_a_west_of_u41": {
+        "surrounding_bga_centers_um": [-40703.2, 24675.0, -35818.8, 31725.0],
+        "lsc_cavity_250um_rule_bbox_um": [-40173.2, 25205.0, -36348.8, 31195.0],
+        "co_resident_lscs": { "VDDC_1P0_HBM_MEM5": 16, "VDDQ_0P85_HBM_MEM5": 11 },
+        "lscs_inside_u41_emib_shadow": 0,
+        "east_cavity_to_u41_emib_die_um": 552.9
+      },
+      "pocket_b_north_of_u41": {
+        "co_resident_lscs": { "VDDQL5": 6, "VDD_0P75_HBMPHY_UC5": 7, "VDD_0P7_UCIE_W": 2 },
+        "lsc_center_bbox_um": [-33157.1, 32300.7, -30407.1, 34180.7],
+        "lscs_inside_u41_emib_shadow": 0
+      }
+    }
+  }
+}

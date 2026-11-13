@@ -1,0 +1,102 @@
+{
+  "source_dump": "HH_Nguyen_2026-1023_1900_TO_v8_dump.txt",
+  "die_family": "HUTTON_HILL_LDA_BC_A0",
+  "lda_instances": {
+    "U9":  { "vddc_net": "VDDC0", "sram_net": "VDD_0P8_SRAM_CC0", "obs_nets": ["OBS_VDD_0P8_SRAM_CC0_0", "OBS_VDD_0P8_SRAM_CC0_0_VSS", "OBS_VDD_0P8_SRAM_CC0_1", "OBS_VDD_0P8_SRAM_CC0_1_VSS"], "sns_nets": ["SNS_VDD_0P8_SRAM_CC0", "SNS_VDD_0P8_SRAM_CC0_VSS"], "center_um": [0.0, 23914.005],  "rotation_deg": 90.0,  "bbox_um": [-17038.42, 15145.355, 17038.42, 32071.865] },
+    "U12": { "vddc_net": "VDDC1", "sram_net": "VDD_0P8_SRAM_CC1", "obs_nets": ["OBS_VDD_0P8_SRAM_CC1_0", "OBS_VDD_0P8_SRAM_CC1_0_VSS", "OBS_VDD_0P8_SRAM_CC1_1", "OBS_VDD_0P8_SRAM_CC1_1_VSS"], "sns_nets": ["SNS_VDD_0P8_SRAM_CC1", "SNS_VDD_0P8_SRAM_CC1_VSS"], "center_um": [0.0, 7971.017],   "rotation_deg": 270.0, "bbox_um": [-17038.42, -186.843, 17038.42, 16739.667] },
+    "U88": { "vddc_net": "VDDC2", "sram_net": "VDD_0P8_SRAM_CC2", "obs_nets": ["OBS_VDD_0P8_SRAM_CC2_0", "OBS_VDD_0P8_SRAM_CC2_0_VSS", "OBS_VDD_0P8_SRAM_CC2_1", "OBS_VDD_0P8_SRAM_CC2_1_VSS"], "sns_nets": ["SNS_VDD_0P8_SRAM_CC2", "SNS_VDD_0P8_SRAM_CC2_VSS"], "center_um": [0.0, -7971.017],  "rotation_deg": 90.0,  "bbox_um": [-17038.42, -16739.667, 17038.42, 186.843] },
+    "U10": { "vddc_net": "VDDC3", "sram_net": "VDD_0P8_SRAM_CC3", "obs_nets": ["OBS_VDD_0P8_SRAM_CC3_0", "OBS_VDD_0P8_SRAM_CC3_0_VSS", "OBS_VDD_0P8_SRAM_CC3_1", "OBS_VDD_0P8_SRAM_CC3_1_VSS"], "sns_nets": ["SNS_VDD_0P8_SRAM_CC3", "SNS_VDD_0P8_SRAM_CC3_VSS"], "center_um": [0.0, -23914.005], "rotation_deg": 270.0, "bbox_um": [-17038.42, -32071.865, 17038.42, -15145.355] }
+  },
+  "u9_reference_learned_metrics": {
+    "surface_c4_bumps": {
+      "VDDC0":            { "bumps": 10664, "padstack": "C35_21_DP_01A", "vias_surface_to_12f": 10515, "vip_pct": 98.60, "surface_straps": 385, "strap_width_um": 50.0 },
+      "VDD_0P8_SRAM_CC0": { "bumps": 1007,  "padstack": "C35_21_DP_01A", "vias_surface_to_12f": 1007,  "vip_pct": 100.0, "surface_straps": 0,   "note": "100% 3-stacked SURFACE->12F->11F->10F directly into dedicated 10F SRAM plane" },
+      "VSS":              { "bumps": 16797, "padstacks": { "C35_21_DP_01A": 11803, "C18_6_DP_01A": 4994 }, "vias_surface_to_12f": 12246, "vip_pct": 72.91, "emib_vias_surface_to_c0": "VU30_19_35_SURFACE_C0_01B", "surface_strap_widths_um": [14.0, 50.0] }
+    },
+    "edtc_4fco_sharing": {
+      "symbol_name": "N24792-018_LIVE_BUG_4FCO_02A",
+      "total_edtc_count_for_u9": 6,
+      "pure_vddc0_edtcs": [
+        { "refdes": "C2215", "VDDC0_pins": 72, "SRAM0_pins": 0,  "VSS_pins": 72, "bbox_um": [-10739.0, 25227.1, -8799.0, 29857.1] },
+        { "refdes": "C2217", "VDDC0_pins": 72, "SRAM0_pins": 0,  "VSS_pins": 72, "bbox_um": [3904.1,   25227.1, 5844.1,  29857.1] },
+        { "refdes": "C2219", "VDDC0_pins": 72, "SRAM0_pins": 0,  "VSS_pins": 72, "bbox_um": [3904.1,   17966.1, 5844.1,  22596.1] },
+        { "refdes": "C2220", "VDDC0_pins": 72, "SRAM0_pins": 0,  "VSS_pins": 72, "bbox_um": [-10739.0, 17966.1, -8799.0, 22596.1] }
+      ],
+      "shared_dual_rail_edtcs": [
+        { "refdes": "C2216", "VDDC0_pins": 24, "SRAM0_pins": 48, "VSS_pins": 72, "bbox_um": [-3835.2,  21597.0, -1895.2, 26227.0], "corridor": "WEST_SRAM_CORRIDOR" },
+        { "refdes": "C2218", "VDDC0_pins": 48, "SRAM0_pins": 24, "VSS_pins": 72, "bbox_um": [9903.3,   21597.0, 11843.3, 26227.0], "corridor": "EAST_SRAM_CORRIDOR" }
+      ],
+      "pin_totals": { "VDDC0": 360, "VDD_0P8_SRAM_CC0": 72, "VSS": 432 }
+    },
+    "layer_plane_partition_27layers": {
+      "SURFACE": "C4 Die Bumps + Short 14um/50um Straps + VSS Flood Outside Die",
+      "C0":      "EMIB Silicon Bridge RDL (VU30_19_35_SURFACE_C0_01B)",
+      "12F":     "VDDC0 Dedicated Full-Die Plane ([-15706, 15924, 15781, 31741]) + 30um Diag Straps; SRAM0 passes through via 1007 antipads",
+      "11F":     "VSS Continuous Reference Plane + 25um Straps",
+      "10F":     "VDD_0P8_SRAM_CC0 Dedicated Full-Die Collection Plane ([-15552, 16126, 15673, 31627]) + 1 Small VDDC0 Window ([3113, 17505, 6593, 30401])",
+      "9F":      "VSS Continuous Reference Plane",
+      "8F":      "VDDC0 Dedicated Full-Die Plane ([-16362, 16126, 15781, 32103]); SRAM0 passes through via 90um local pads/straps",
+      "7F":      "VSS Continuous Reference Plane",
+      "6F":      "CO-PLANAR SPLIT: VDDC0 Main Plane + Carved VDD_0P8_SRAM_CC0 West/East Sub-Islands ([8059, 20651, 13159, 27131] & West)",
+      "5F":      "VSS Continuous Reference Plane",
+      "4FCO":    "CO-PLANAR SPLIT: VDDC0 Main Plane + Carved VDD_0P8_SRAM_CC0 Corridors + 6 eDTC Footprints (300um Cavity + 150um Guard KOZ)",
+      "3FCI":    "VSS Plane + 175um Spider-Web PP Straps for VDDC0 (3598 segs) & SRAM0 (564 segs)",
+      "2FCI":    "CO-PLANAR SPLIT: VDDC0 Main Plane + Carved VDD_0P8_SRAM_CC0 Corridors + 150um eDTC Guard Rings",
+      "1FCI":    "VSS Plane + 350um Vertical Core Power Fingers (889 VDDC0 + 141 SRAM0, len=316um)",
+      "1BCI":    "VSS Plane + 350um Vertical Core Power Fingers (889 VDDC0 + 141 SRAM0, len=316um)",
+      "2BCI":    "CO-PLANAR SPLIT: VDDC0 Main Plane + Carved VDD_0P8_SRAM_CC0 Corridors + 150um eDTC Guard Rings",
+      "3BCI":    "VSS Plane + 175um Spider-Web PP Straps for VDDC0 (3595 segs) & SRAM0 (564 segs)",
+      "4BCO":    "CO-PLANAR SPLIT: VDDC0 Main Plane + Carved VDD_0P8_SRAM_CC0 Corridors (0 vias in eDTC KOZ)",
+      "5B":      "VSS Continuous Solid Plane (Mandatory under all 6 eDTC Cavities + Guard Rings) + 67.5um Power Escape Straps",
+      "6B":      "CO-PLANAR SPLIT: VDDC0 Main Plane + Carved VDD_0P8_SRAM_CC0 West/East Corridors",
+      "7B":      "VSS Continuous Plane + 90um Horizontal Power Busbars (180um len)",
+      "8B":      "CO-PLANAR SPLIT: VDDC0 Main Plane + Carved VDD_0P8_SRAM_CC0 West/East Corridors",
+      "9B":      "VSS Continuous Plane + 90um Horizontal Power Busbars (180um len)",
+      "10B":     "VDD_0P8_SRAM_CC0 Dedicated Full-Span Backside Plane ([-15205, 16237, 15048, 32950])",
+      "11B":     "VSS Continuous Reference Shield Plane + 90um Horizontal Busbars",
+      "12B":     "CO-PLANAR SPLIT: VDDC0 Main Plane + Carved VDD_0P8_SRAM_CC0 Corridors (40um GX92 GCP Dielectric Below)",
+      "BASE":    "BGA Array (202 VDDC0 + 22 SRAM0 w/ 8-Via R=195um Octagonal Rings) + Co-Pocket 0201 LSCs (156 VDDC0 + 40 SRAM0) + LSC_CAVITY"
+    },
+    "core_pth_and_pp_summary": {
+      "VDDC0":            { "core_pths_2fci_2bci": 965,  "padstack": "V282_5_150_282_5_2FCI_2BCI_01B", "pp_vias_per_layer": 1470, "concentric_1via_pths": 466, "dual_2via_spider_pths": 499 },
+      "VDD_0P8_SRAM_CC0": { "core_pths_2fci_2bci": 179,  "padstack": "V282_5_150_282_5_2FCI_2BCI_01B", "pp_vias_per_layer": 276,  "concentric_1via_pths": 82,  "dual_2via_spider_pths": 97 },
+      "VSS_in_u9_region": { "core_pths_2fci_2bci": 3039, "padstack": "V282_5_150_282_5_2FCI_2BCI_01B", "pp_vias_per_layer": 4258 }
+    },
+    "base_bga_and_lsc_summary": {
+      "VDDC0":            { "bga_count": 202, "bga_padstack": "C480_60_01B", "vias_per_bga": 8, "bga_ring_radius_um": 195.0, "lsc_0201_10uF_count": 156 },
+      "VDD_0P8_SRAM_CC0": { "bga_count": 22,  "bga_padstack": "C480_60_01B", "vias_per_bga": 8, "bga_ring_radius_um": 195.0, "lsc_0201_10uF_count": 40 }
+    },
+    "emib_and_recess_cavity_rules_on_u9": {
+      "adjacent_emib_bridges_um": {
+        "U25_west":       [-18817.0, 21125.0, -13158.0, 26703.0],
+        "U29_sw_corner":  [-18817.0, 13179.0, -13158.0, 18757.0],
+        "U32_east":       [13158.0,  21125.0,  18817.0, 26703.0],
+        "U28_se_corner":  [13158.0,  13179.0,  18817.0, 18757.0],
+        "U39_north":      [-2817.0,  33035.7,   2817.0, 39305.9]
+      },
+      "emib_rules": {
+        "c0_exclusivity_inside_bridge_only": true,
+        "l12f_l11f_emib_cavity_koz_um": 157.5,
+        "l10f_isolated_guard_ring_um": 150.0,
+        "l10f_guard_ring_to_c4_plane_um": 50.0,
+        "l10f_csb_pad_to_c4_plane_um": 372.0,
+        "csb_max_stacked_via_below_10f": 2,
+        "edtc_cavity_to_emib_cavity_min_um": 1000.0,
+        "base_lsc_prohibited_under_emib_die_rule19": "Explains why U9_POCKET_5 (x <= -1826.6 um) and U9_POCKET_6 (x >= +1826.6 um, y_top = 33035.7 um tangent to U39) split cleanly around U39"
+      },
+      "base_recess_cavity_rules": {
+        "recess_depth_z_um": "533 +/- 102 (21 +/- 4 mil, L5 uncut, C > 150 um)",
+        "bga_sro_to_cavity_code_g_um": 250.0,
+        "smd1_smo_to_cavity_code_h_um": 254.0,
+        "smd8_smo_to_cavity_code_i_um": 330.2,
+        "lsc_sro_to_cavity_slide11_um": 225.0,
+        "corner_milling_radius_code_k_um": 500.0,
+        "min_cavity_xy_code_e_um": 1016.0,
+        "cavity_web_code_j_um": 508.0,
+        "sm_min_web_codes_ab_um": 76.0,
+        "ext_cu_signal_koz_code_d_um": 178.0,
+        "int_cu_signal_koz_code_d_um": 203.0
+      }
+    }
+  }
+}
