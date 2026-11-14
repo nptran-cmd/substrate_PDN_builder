@@ -155,7 +155,7 @@ def run_u7_topside_bu_sandbox(
 
     # 2. Load U7 SURFACE VDD* bumps from Symbols/hutton_hill_ldb_bc_a0_FN.zip
     u7_vdd_bumps: List[Dict[str, Any]] = []
-    ldb_zip = Path(r"<cadence_library_dir>")
+    ldb_zip = Path(r"G:\My Drive\HFC_TO_docs\Symbols\hutton_hill_ldb_bc_a0_FN.zip")
     if ldb_zip.exists():
         with zipfile.ZipFile(ldb_zip, "r") as z:
             raw = z.read("U1.HUTTON_HILL_LDB_A0.csv").decode("utf-8", errors="ignore")

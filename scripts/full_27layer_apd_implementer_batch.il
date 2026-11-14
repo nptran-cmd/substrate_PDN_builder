@@ -135,6 +135,40 @@ procedure( pdnFindTemplateLscAndCleanU7Base()
   )
 )
 
+procedure( pdnU7ParsePolyVerts( vertStr )
+  let( (pairs p xy x y pts firstPt)
+    pts = nil
+    firstPt = nil
+    foreach( p parseString(vertStr ";")
+      xy = parseString(p ",")
+      when( length(xy) >= 2
+        x = float(atof(nth(0 xy)))
+        y = float(atof(nth(1 xy)))
+        unless( firstPt firstPt = list(x y) )
+        pts = append1(pts list(x y))
+      )
+    )
+    when( firstPt && length(pts) >= 3
+      pts = append1(pts firstPt)
+    )
+    pts
+  )
+)
+
+procedure( pdnU7CreatePolyRing( outerPts innerPts targetLayer )
+  let( (oShp)
+    when( outerPts && length(outerPts) >= 4
+      oShp = car(errset(axlDBCreateOpenShape(axlPathStart(outerPts 0.0) t targetLayer nil) nil))
+      when( oShp
+        when( innerPts && length(innerPts) >= 4
+          errset(axlDBCreateVoid(oShp axlPathStart(innerPts 0.0)) nil)
+        )
+        errset(axlDBCreateCloseShape(oShp) nil)
+      )
+    )
+  )
+)
+
 ; -----------------------------------------------------------------------------
 ; Stream-Execute the Full 27-Layer Pipe-Delimited Master Recipe File in APD
 ; -----------------------------------------------------------------------------
@@ -149,6 +183,12 @@ procedure( pdnImplementFull27LayerFromMasterRecipe(recipePath @optional (saveAtE
     ; Disable online DRC & dynamic fill during high-speed batch creation (173,670 objects)
     errset(axlDBControl('drcEnable nil) nil)
     errset(axlDBControl('dynamicFillMode 'disabled) nil)
+    unless( axlIsLayer("SUBSTRATE GEOMETRY/recess_cavity_pdn")
+      axlLayerCreateNonConductor("SUBSTRATE GEOMETRY/recess_cavity_pdn")
+    )
+    unless( axlIsLayer("SUBSTRATE GEOMETRY/LSC_CAVITY")
+      axlLayerCreateNonConductor("SUBSTRATE GEOMETRY/LSC_CAVITY")
+    )
 
     netTbl = pdnBuildNetLookupTable()
     padTbl = makeTable("pdnMasterPadTbl" nil)
@@ -185,6 +225,33 @@ procedure( pdnImplementFull27LayerFromMasterRecipe(recipePath @optional (saveAtE
           recType = upperCase(nth(0 parts))
 
           case( recType
+            ; POLY_CAVITY|<id>|<cav_verts>|<outer_koz_verts>|<inner_safe_verts>
+            ("POLY_CAVITY"
+              when( length(parts) >= 3
+                let( (cavPts kozPts safePts rLyr)
+                  rLyr    = "SUBSTRATE GEOMETRY/recess_cavity_pdn"
+                  cavPts  = pdnU7ParsePolyVerts(nth(2 parts))
+                  kozPts  = if( length(parts) >= 4 then pdnU7ParsePolyVerts(nth(3 parts)) else nil )
+                  safePts = if( length(parts) >= 5 then pdnU7ParsePolyVerts(nth(4 parts)) else nil )
+                  when( cavPts && length(cavPts) >= 4
+                    errset(axlDBCreateShape(axlPathStart(cavPts 0.0) t "SUBSTRATE GEOMETRY/LSC_CAVITY") nil)
+                    errset(axlDBCreatePath(axlPathStart(cavPts 25.0) rLyr) nil)
+                  )
+                  when( kozPts && length(kozPts) >= 4 && cavPts && length(cavPts) >= 4
+                    pdnU7CreatePolyRing(kozPts cavPts rLyr)
+                    errset(axlDBCreatePath(axlPathStart(kozPts 25.0) rLyr) nil)
+                    when( axlIsLayer("ROUTE KEEPOUT/BASE")
+                      errset(axlDBCreateShape(axlPathStart(kozPts 0.0) t "ROUTE KEEPOUT/BASE") nil)
+                    )
+                  )
+                  when( safePts && length(safePts) >= 4 && cavPts && length(cavPts) >= 4
+                    pdnU7CreatePolyRing(cavPts safePts rLyr)
+                    errset(axlDBCreatePath(axlPathStart(safePts 20.0) rLyr) nil)
+                  )
+                )
+              )
+            )
+
             ; LSC_SYM|<refdes>|<symbol_name>|BOTTOM|<x>|<y>|<rot>|<pin1_net>|<pin2_net>|<pocket_id>
             ("LSC_SYM"
               when( length(parts) >= 9

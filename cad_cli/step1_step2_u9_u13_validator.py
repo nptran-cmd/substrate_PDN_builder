@@ -24,6 +24,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Sequence, Tuple
 
 from .cadence_runner import CadenceBatchRunner
+from .curved_recess_and_lsc_engine import (
+    PlacedLscItem,
+    synthesize_curved_bga_recess_and_pack_lscs,
+)
 from .hbm_surface_and_csb_router import (
     connect_u9_sram0_10f_backbone,
     route_u13_emib_csb_and_c0_pins,
@@ -44,6 +48,7 @@ from .multi_rail_polygon_engine import (
     U9_DOMAIN_BBOX,
     U9_EDTC_BODIES,
     U9_EMIB_BRIDGES,
+    U9_SRAM0_SUB_ISLANDS_12B,
     ViaRecord,
     audit_via_continuity_and_zero_overlap,
     build_u13_hbm_27layer_polygons,
@@ -105,58 +110,113 @@ def _compute_cavities_from_lscs(
     bga_balls: Sequence[Dict[str, str]],
     target_nets: Sequence[str],
     prefix: str,
-) -> List[CavityRecord]:
+    ownership: MultiRailLayerOwnershipIndex | None = None,
+    emib_boxes: Sequence[BBox] = (),
+) -> Tuple[List[CavityRecord], List[PlacedLscItem], List[str]]:
     """
-    Cluster placed LSCs by proximity (`<= 2100 um`) and build exact `R = 500 um` `LSC_CAVITY` &
-    `SUBSTRATE GEOMETRY/recess_cavity_pdn` KOZ contours bounded by surrounding BGA walls (`>= 250 um` BGA SRO
-    to cavity, `>= 225 um` LSC SRO to cavity wall & `R = 500 um` rounded corners, `178 um` external Recess KOZ).
+    Cluster placed LSCs by proximity (`<= 2100 um`), synthesize exact curved BGA-following
+    mechanical recess contours (`R_mill = 508 um` Code K, `>= 254 um` BGA SRO->Cav Code G/H,
+    `+178 um` Ext Cu KOZ Code D, `-225 um` LSC SRO safe zone Slide 11), and place/repair
+    `CONDUCTOR/BASE` `180 deg` LSCs strictly inside the curved safe zone!
     """
     tset = set(target_nets)
-    pts = [
-        (float(r["x_um"]), float(r["y_um"]), float(r["rotation"]))
-        for r in lscs
-        if r["pin1_net"] in tset or r["pin2_net"] in tset
-    ]
-    bga_xy = [(float(b["x_um"]), float(b["y_um"])) for b in bga_balls]
-    visited = [False] * len(pts)
+    target_rows = [r for r in lscs if r["pin1_net"] in tset or r["pin2_net"] in tset]
+    other_rows = [r for r in lscs if r["pin1_net"] not in tset and r["pin2_net"] not in tset]
+
+    def _rail_resolver(cx: float, cy: float, rot: float) -> str | None:
+        if ownership is None:
+            return target_nets[0]
+        tmp = PlacedLscItem("TMP", "SM0201_690X390X550_01A", cx, cy, rot, target_nets[0], "VSS", "P")
+        (p1x, p1y), _ = tmp.pin_coords
+        own12 = ownership.owner_at("12B", p1x, p1y, min_edge_margin_um=40.0)
+        if own12 in tset:
+            if "VDD_0P8_SRAM_CC0" in tset and any(
+                sb[0] + 40.0 <= p1x <= sb[2] - 40.0 and sb[1] + 40.0 <= p1y <= sb[3] - 40.0
+                for sb in U9_SRAM0_SUB_ISLANDS_12B
+            ):
+                if ownership.owner_at("10B", p1x, p1y, min_edge_margin_um=45.0) == "VDD_0P8_SRAM_CC0":
+                    return "VDD_0P8_SRAM_CC0"
+            if "VDDQ_0P85_HBM_MEM5" in tset and -37950.0 <= p1x <= -36200.0 and 25000.0 <= p1y <= 31500.0:
+                if ownership.owner_at("10B", p1x, p1y, min_edge_margin_um=45.0) == "VDDQ_0P85_HBM_MEM5":
+                    return "VDDQ_0P85_HBM_MEM5"
+            return own12
+        own10 = ownership.owner_at("10B", p1x, p1y, min_edge_margin_um=45.0)
+        return own10 if own10 in tset else None
+
+    visited = [False] * len(target_rows)
     cavs: List[CavityRecord] = []
+    built_polys: List[List[Tuple[float, float]]] = []
+    all_placed: List[PlacedLscItem] = []
+    all_delete: List[str] = []
     p_idx = 1
-    for i in range(len(pts)):
+
+    for i in range(len(target_rows)):
         if visited[i]:
             continue
-        comp = [pts[i]]
+        comp_rows = [target_rows[i]]
         visited[i] = True
-        q = [pts[i]]
+        q = [target_rows[i]]
         while q:
-            cx, cy, _ = q.pop()
-            for j in range(len(pts)):
-                if not visited[j] and abs(pts[j][0] - cx) <= 2100.0 and abs(pts[j][1] - cy) <= 2100.0:
-                    visited[j] = True
-                    comp.append(pts[j])
-                    q.append(pts[j])
-        sx0 = min(x - (150.0 if int(round(rot)) % 180 == 0 else 410.0) for x, y, rot in comp)
-        sy0 = min(y - (410.0 if int(round(rot)) % 180 == 0 else 150.0) for x, y, rot in comp)
-        sx1 = max(x + (150.0 if int(round(rot)) % 180 == 0 else 410.0) for x, y, rot in comp)
-        sy1 = max(y + (410.0 if int(round(rot)) % 180 == 0 else 150.0) for x, y, rot in comp)
+            cur = q.pop()
+            cx, cy = float(cur["x_um"]), float(cur["y_um"])
+            for j in range(len(target_rows)):
+                if not visited[j]:
+                    jx, jy = float(target_rows[j]["x_um"]), float(target_rows[j]["y_um"])
+                    if abs(jx - cx) <= 2100.0 and abs(jy - cy) <= 2100.0:
+                        visited[j] = True
+                        comp_rows.append(target_rows[j])
+                        q.append(target_rows[j])
 
-        # Find nearest surrounding BGA walls outside [sx0..sx1, sy0..sy1] (`490 um` = 240 BGA SRO + 250 Cavity rule)
-        cx0, cy0, cx1, cy1 = sx0 - 310.0, sy0 - 310.0, sx1 + 310.0, sy1 + 310.0
-        west_bgas  = [bx for bx, by in bga_xy if (sy0 - 350.0) <= by <= (sy1 + 350.0) and (sx0 - 1400.0) <= bx < sx0]
-        east_bgas  = [bx for bx, by in bga_xy if (sy0 - 350.0) <= by <= (sy1 + 350.0) and sx1 < bx <= (sx1 + 1400.0)]
-        south_bgas = [by for bx, by in bga_xy if (sx0 - 350.0) <= bx <= (sx1 + 350.0) and (sy0 - 1400.0) <= by < sy0]
-        north_bgas = [by for bx, by in bga_xy if (sx0 - 350.0) <= bx <= (sx1 + 350.0) and sy1 < by <= (sy1 + 1400.0)]
-        if west_bgas:
-            cx0 = min(sx0 - 225.0, max(cx0, max(west_bgas) + 490.0))
-        if east_bgas:
-            cx1 = max(sx1 + 225.0, min(cx1, min(east_bgas) - 490.0))
-        if south_bgas:
-            cy0 = min(sy0 - 225.0, max(cy0, max(south_bgas) + 490.0))
-        if north_bgas:
-            cy1 = max(sy1 + 225.0, min(cy1, min(north_bgas) - 490.0))
-
-        cavs.append(CavityRecord(f"{prefix}_CAV_{p_idx}", round(cx0, 2), round(cy0, 2), round(cx1, 2), round(cy1, 2), 500.0, 178.0, 225.0))
+        # Find any shared-pocket neighbor LSCs of other rails (e.g. U13 Pocket B HBMPHY/UCIE)
+        c_xs = [float(r["x_um"]) for r in comp_rows]
+        c_ys = [float(r["y_um"]) for r in comp_rows]
+        nb_box = (min(c_xs) - 2200.0, min(c_ys) - 2200.0, max(c_xs) + 2200.0, max(c_ys) + 2200.0)
+        fixed_nbs = [
+            r for r in other_rows
+            if nb_box[0] <= float(r["x_um"]) <= nb_box[2] and nb_box[1] <= float(r["y_um"]) <= nb_box[3]
+        ]
+        seeds = [(float(r["x_um"]), float(r["y_um"])) for r in comp_rows]
+        pk_id = f"{prefix}_CAV_{p_idx}"
+        res_pk = synthesize_curved_bga_recess_and_pack_lscs(
+            pocket_id=pk_id,
+            seed_points=seeds,
+            bga_balls=bga_balls,
+            default_vdd_net=target_nets[0],
+            rail_resolver_fn=_rail_resolver,
+            existing_pocket_lscs=comp_rows,
+            fixed_neighbor_lscs=fixed_nbs,
+            emib_shadow_boxes=emib_boxes,
+            other_cavity_polys=built_polys,
+            refdes_prefix=f"CLSC_{prefix}_P{p_idx}",
+            start_index=1,
+        )
+        cb = res_pk.bbox if res_pk.cavity_poly else (min(c_xs) - 300.0, min(c_ys) - 300.0, max(c_xs) + 300.0, max(c_ys) + 300.0)
+        if res_pk.cavity_poly:
+            built_polys.append(res_pk.cavity_poly)
+        cavs.append(
+            CavityRecord(
+                pocket_id=pk_id,
+                x1=round(cb[0], 2),
+                y1=round(cb[1], 2),
+                x2=round(cb[2], 2),
+                y2=round(cb[3], 2),
+                corner_r_um=508.0,
+                ext_koz_um=178.0,
+                lsc_safe_in_um=225.0,
+                cavity_poly=res_pk.cavity_poly,
+                outer_koz_poly=res_pk.outer_koz_poly,
+                inner_safe_poly=res_pk.inner_safe_poly,
+                is_non_rectangular=res_pk.is_non_rectangular,
+            )
+        )
+        used_refs = {it.refdes for it in res_pk.placed_lscs}
+        for old_r in res_pk.replaced_refdes:
+            if old_r and old_r not in used_refs:
+                all_delete.append(old_r)
+        all_placed.extend(res_pk.placed_lscs)
         p_idx += 1
-    return cavs
+
+    return cavs, all_placed, all_delete
 
 
 def _render_multirail_svg(
@@ -220,15 +280,21 @@ def _render_multirail_svg(
 
         if "12B" in lyrs:
             for cv in cavities:
-                # Outer +178 um Recess KOZ (`SUBSTRATE GEOMETRY/recess_cavity_pdn`) + R=500 um LSC_CAVITY
-                kx, ky = tx(cv.x1 - cv.ext_koz_um), ty(cv.y2 + cv.ext_koz_um)
-                kw, kh = max(2.0, (cv.x2 - cv.x1 + 2 * cv.ext_koz_um) * scale), max(2.0, (cv.y2 - cv.y1 + 2 * cv.ext_koz_um) * scale)
-                kr = round((cv.corner_r_um + cv.ext_koz_um) * scale, 2)
-                out.append(f'<rect x="{kx}" y="{ky}" width="{kw:.2f}" height="{kh:.2f}" rx="{kr}" fill="none" stroke="#f43f5e" stroke-width="1.3" stroke-dasharray="2,2"/>')
-                rx, ry = tx(cv.x1), ty(cv.y2)
-                rw, rh = max(2.0, (cv.x2 - cv.x1) * scale), max(2.0, (cv.y2 - cv.y1) * scale)
-                rr = round(cv.corner_r_um * scale, 2)
-                out.append(f'<rect x="{rx}" y="{ry}" width="{rw:.2f}" height="{rh:.2f}" rx="{rr}" fill="none" stroke="#22d3ee" stroke-width="1.8" stroke-dasharray="5,3"/>')
+                if cv.cavity_poly:
+                    if cv.outer_koz_poly:
+                        k_pts = " ".join(f"{tx(vx)},{ty(vy)}" for vx, vy in cv.outer_koz_poly)
+                        out.append(f'<polygon points="{k_pts}" fill="none" stroke="#f43f5e" stroke-width="1.3" stroke-dasharray="2,2"/>')
+                    c_pts = " ".join(f"{tx(vx)},{ty(vy)}" for vx, vy in cv.cavity_poly)
+                    out.append(f'<polygon points="{c_pts}" fill="none" stroke="#22d3ee" stroke-width="1.8" stroke-dasharray="5,3"/>')
+                else:
+                    kx, ky = tx(cv.x1 - cv.ext_koz_um), ty(cv.y2 + cv.ext_koz_um)
+                    kw, kh = max(2.0, (cv.x2 - cv.x1 + 2 * cv.ext_koz_um) * scale), max(2.0, (cv.y2 - cv.y1 + 2 * cv.ext_koz_um) * scale)
+                    kr = round((cv.corner_r_um + cv.ext_koz_um) * scale, 2)
+                    out.append(f'<rect x="{kx}" y="{ky}" width="{kw:.2f}" height="{kh:.2f}" rx="{kr}" fill="none" stroke="#f43f5e" stroke-width="1.3" stroke-dasharray="2,2"/>')
+                    rx, ry = tx(cv.x1), ty(cv.y2)
+                    rw, rh = max(2.0, (cv.x2 - cv.x1) * scale), max(2.0, (cv.y2 - cv.y1) * scale)
+                    rr = round(cv.corner_r_um * scale, 2)
+                    out.append(f'<rect x="{rx}" y="{ry}" width="{rw:.2f}" height="{rh:.2f}" rx="{rr}" fill="none" stroke="#22d3ee" stroke-width="1.8" stroke-dasharray="5,3"/>')
 
         # Draw BOTH VSS and Power vias for the panel's target span (with explicit 9F->5F & 9B->5B visibility!)
         if via_span_pair == ("9F", "8F"):
@@ -324,22 +390,42 @@ def write_master_recipe(
     cavities: Sequence[CavityRecord],
     vias: Sequence[ViaRecord],
     clines: Sequence[ClineRecord],
+    placed_lscs: Sequence[PlacedLscItem] = (),
+    delete_lsc_refdes: Sequence[str] = (),
 ) -> Path:
     recipe_path.parent.mkdir(parents=True, exist_ok=True)
     lines = [
-        "# Step 1 + Step 2 Multi-Rail Master Recipe (U9 VDDC0+SRAM0 & U13 HBM 4-Rail | 9F->5F & 9B->5B VSS+VDD | 0 Via Overlap)",
+        "# Step 1 + Step 2 Multi-Rail Master Recipe (U9 VDDC0+SRAM0 & U13 HBM 4-Rail | Curved Recess & 180-deg LSC | 0 Via Overlap)",
         "# Generated by step1_step2_u9_u13_validator.py",
     ]
     for cv in cavities:
+        if cv.cavity_poly:
+            c_str = ";".join(f"{x:.2f},{y:.2f}" for x, y in cv.cavity_poly)
+            k_str = ";".join(f"{x:.2f},{y:.2f}" for x, y in cv.outer_koz_poly)
+            s_str = ";".join(f"{x:.2f},{y:.2f}" for x, y in cv.inner_safe_poly)
+            lines.append(f"POLY_CAVITY|{cv.pocket_id}|{c_str}|{k_str}|{s_str}")
+        else:
+            lines.append(
+                f"CAVITY|{cv.pocket_id}|{cv.x1:.3f}|{cv.y1:.3f}|{cv.x2:.3f}|{cv.y2:.3f}|"
+                f"{cv.corner_r_um:.1f}|{cv.ext_koz_um:.1f}|{cv.lsc_safe_in_um:.1f}"
+            )
+
+    for del_ref in delete_lsc_refdes:
+        lines.append(f"LSC_DELETE|{del_ref}")
+    for cap in placed_lscs:
         lines.append(
-            f"CAVITY|{cv.pocket_id}|{cv.x1:.3f}|{cv.y1:.3f}|{cv.x2:.3f}|{cv.y2:.3f}|"
-            f"{cv.corner_r_um:.1f}|{cv.ext_koz_um:.1f}|{cv.lsc_safe_in_um:.1f}"
+            f"LSC_PLACE|{cap.refdes}|{cap.symbol_name}|{cap.x:.3f}|{cap.y:.3f}|"
+            f"{cap.rot_deg:.1f}|{cap.pin1_net}|{cap.pin2_net}"
         )
 
     for poly in polygons:
         vstr = ";".join(f"{x:.3f},{y:.3f}" for x, y in poly.vertices)
         has_v = "YES" if poly.voids else "NO"
-        mode_s = "DYNAMIC" if (poly.is_dynamic and poly.net_name != "__ISOLATED__") else "STATIC_GUARD"
+        mode_s = (
+            "DYNAMIC"
+            if (poly.is_dynamic and poly.net_name != "__ISOLATED__")
+            else ("STATIC_GUARD" if poly.net_name == "__ISOLATED__" else "STATIC_NET")
+        )
         lines.append(f"POLY_SHAPE|{poly.layer}|{poly.net_name}|{mode_s}|{has_v}|{vstr}")
         if poly.voids:
             for vd in poly.voids:
@@ -434,11 +520,19 @@ def synthesize_and_validate_step1_step2_u9_u13(
         edtc_profiles=u9_edtc_profs,
     )
 
-    # Priority 3: BASE BGA & LSC Climbs (12B->BASE up to 11B/10B)
+    # Priority 3: Curved BGA-Following Recesses + `180 deg` BASE LSC Placement + BGA/LSC Climbs (12B->BASE up to 11B/10B)
+    u9_cavs, u9_placed_lscs, u9_del_lscs = _compute_cavities_from_lscs(
+        lscs=lsc_caps,
+        bga_balls=bga_balls,
+        target_nets=("VDDC0", "VDD_0P8_SRAM_CC0"),
+        prefix="U9",
+        ownership=u9_own,
+        emib_boxes=list(U9_EMIB_BRIDGES.values()),
+    )
     oct8 = _octagonal_8via_offsets(195.0)
     u9_bot_stats = route_bottom_bga_and_lsc_with_atomic_pruning(
         bga_balls=bga_balls,
-        lsc_caps=lsc_caps,
+        lsc_caps=[it.to_cap_dict() for it in u9_placed_lscs],
         target_power_rails=("VDDC0", "VDD_0P8_SRAM_CC0"),
         vss_bbox=(-15200.0, 16800.0, 15200.0, 33150.0),
         ownership=u9_own,
@@ -493,7 +587,6 @@ def synthesize_and_validate_step1_step2_u9_u13(
     u9_top_stats["upper_bu_vias_total"] += u9_sram_top["upper_bu_vias_total"]
     u9_top_stats["emib_c0_vias"] = u9_emib_stats["emib_c0_vias"]
     u9_top_stats["emib_csb_vss_1stack"] = u9_emib_stats["emib_csb_vss_1stack"]
-    u9_cavs = _compute_cavities_from_lscs(lsc_caps, bga_balls, ("VDDC0", "VDD_0P8_SRAM_CC0"), "U9")
 
     # =========================================================================
     # B. Synthesize U13 (`MEM5`: `VDDQ` + `VDDC` + `VDDQL5` + `VPP` + `VSS`)
@@ -539,12 +632,20 @@ def synthesize_and_validate_step1_step2_u9_u13(
         edtc_profiles=u13_edtc_profs,
     )
 
-    # Priority 3: BASE BGA & LSC Climbs (hexagonal r=165um VDDQ 6-via ring -> 75um gap, 0 overlap!)
+    # Priority 3: Curved BGA-Following Recesses + `180 deg` BASE LSC Placement + BGA/LSC Climbs
+    u13_cavs, u13_placed_lscs, u13_del_lscs = _compute_cavities_from_lscs(
+        lscs=lsc_caps,
+        bga_balls=bga_balls,
+        target_nets=hbm_pwr,
+        prefix="U13",
+        ownership=u13_own,
+        emib_boxes=[U41_EMIB_BBOX],
+    )
     vddq_6offs = _hexagonal_6via_offsets(165.0)
     card_4offs = [(-200.0, 0.0), (200.0, 0.0), (0.0, -200.0), (0.0, 200.0)]
     u13_bot_stats = route_bottom_bga_and_lsc_with_atomic_pruning(
         bga_balls=bga_balls,
-        lsc_caps=lsc_caps,
+        lsc_caps=[it.to_cap_dict() for it in u13_placed_lscs],
         target_power_rails=hbm_pwr,
         vss_bbox=(-45800.0, 22400.0, -29500.0, 34650.0),
         ownership=u13_own,
@@ -584,7 +685,6 @@ def synthesize_and_validate_step1_step2_u9_u13(
     )
     u13_top_stats.update(u13_emib_stats)
     u13_top_stats["interplane_stitch_vias"] = u13_mid_bu_stats["total_mid_bu_vias"]
-    u13_cavs = _compute_cavities_from_lscs(lsc_caps, bga_balls, hbm_pwr, "U13")
 
     # =========================================================================
     # C. Independent Zero-Via-Overlap & 9F->5F / 9B->5B Continuity Audit Gate!
@@ -593,6 +693,8 @@ def synthesize_and_validate_step1_step2_u9_u13(
     all_cavs   = list(u9_cavs) + list(u13_cavs)
     all_vias   = list(u9_vias) + list(u13_vias)
     all_clines = list(u9_clines) + list(u13_clines)
+    all_placed_lscs = list(u9_placed_lscs) + list(u13_placed_lscs)
+    all_del_lscs    = list(u9_del_lscs) + list(u13_del_lscs)
 
     u9_audit  = audit_via_continuity_and_zero_overlap(u9_vias)
     u13_audit = audit_via_continuity_and_zero_overlap(u13_vias)
@@ -647,6 +749,8 @@ def synthesize_and_validate_step1_step2_u9_u13(
         cavities=all_cavs,
         vias=all_vias,
         clines=all_clines,
+        placed_lscs=all_placed_lscs,
+        delete_lsc_refdes=all_del_lscs,
     )
 
     il_script = ws / "agent04_pdn_architect" / "scripts" / "multi_rail_step1_step2_implementer_batch.il"

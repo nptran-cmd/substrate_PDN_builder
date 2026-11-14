@@ -41,7 +41,8 @@ python -m agent04_pdn_architect.cad_cli.surface_layer1_router --ratio 3:1 --dire
 # 1B. Core + Prepreg (4FCO <-> 4BCO) — e.g. 7.0 PTH/mm² Staggered with 5-eDTC KOZ:
 python -m agent04_pdn_architect.cad_cli.pth_4fco_4bco_router --density 7.0 --pattern STAGGERED
 
-# 1C. Bottom (BASE) — VDDUC0 / VDDCHx LSC Placement + R=500um Mechanical Recess Cavity Rule SVG:
+# 1C. Bottom (BASE) — VDDUC0 / VDDCHx Curved BGA-Following Recess (POLY_CAVITY) + 180-deg LSC Placement SVG:
+python -m agent04_pdn_architect.cad_cli.curved_recess_and_lsc_engine --all-3-tasks
 python -m agent04_pdn_architect.cad_cli.vdduc0_base_cavity_lsc_svg_generator --both
 ```
 

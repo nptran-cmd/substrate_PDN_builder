@@ -160,9 +160,9 @@ def route_u9_emib_csb_and_c0_pins(
     stats = {"emib_c0_vias": 0, "emib_csb_vss_1stack": 0, "emib_csb_pwr_vias": 0}
     c0_ov = {("SURFACE", "C0"): "VU30_19_35_SURFACE_C0_01B"}
 
-    # Exact set of EMIB C0 pad coordinates so standard U9 C4 bumps over EMIB margin (e.g. X=+-14179.23) never drop dangling C0 vias!
-    emib_c0_xy: Set[Tuple[float, float]] = {
-        (round(float(r["x_um"]), 1), round(float(r["y_um"]), 1))
+    # Exact set of EMIB C0 pad coordinates (+/-1 um tolerance for 9 nm float offsets) so standard U9 C4 bumps never drop C0 vias!
+    emib_c0_int: Set[Tuple[int, int]] = {
+        (int(round(float(r["x_um"]))), int(round(float(r["y_um"]))))
         for r in u9_pins
         if r["refdes"] != "U9" and "C0" in r["start_layer"]
     }
@@ -174,8 +174,13 @@ def route_u9_emib_csb_and_c0_pins(
             continue
         x, y = float(r["x_um"]), float(r["y_um"])
         lyr = r["start_layer"]
+        ps = r.get("padstack_name", "")
+        ix, iy = int(round(x)), int(round(y))
+        is_c0_ubump = ("18" in ps) or any(
+            (ix + dx_i, iy + dy_i) in emib_c0_int for dx_i in (-1, 0, 1) for dy_i in (-1, 0, 1)
+        )
 
-        if ref == "U9" and "SURFACE" in lyr and (round(x, 1), round(y, 1)) in emib_c0_xy:
+        if ref == "U9" and "SURFACE" in lyr and is_c0_ubump:
             if insert_via_stack_zero_overlap(vias_out, grid, net, [("SURFACE", "C0")], x, y, f"U9_EMIB_C0_{net}", c0_ov) > 0:
                 stats["emib_c0_vias"] += 1
         elif ref != "U9" and "10F" in lyr:
@@ -201,7 +206,35 @@ def route_u9_lda_surface_and_emib(
     emib_already_routed: bool = False,
     only_nets: Optional[Sequence[str]] = None,
     shared_bump_obs: Optional[FastXYClearanceGrid] = None,
+    surface_mode: str = "vertical_jog_3to1",
 ) -> Dict[str, int]:
+    if surface_mode == "vertical_jog_3to1":
+        from .u9_vddc_sram_surface_3to1_jog_router import route_u9_vddc0_sram0_vss_3to1_vertical_jog
+
+        jog_res = route_u9_vddc0_sram0_vss_3to1_vertical_jog(
+            u9_pins=u9_pins,
+            ownership=ownership,
+            vias_out=vias_out,
+            clines_out=clines_out,
+            grid=grid,
+            ratio_str=vddc_vss_ratio,
+            trace_width_um=15.0,
+            min_gap_um=15.0,
+            emib_already_routed=emib_already_routed,
+            only_nets=only_nets,
+        )
+        return {
+            "emib_c0_vias": int(jog_res.stats["emib_c0_vias"]),
+            "emib_csb_vss_1stack": int(jog_res.stats["emib_csb_vss_1stack"]),
+            "sram0_vip_columns": int(jog_res.stats["sram0_vip_columns"]),
+            "vddc0_vip_columns": int(jog_res.stats["vddc0_vip_columns"]),
+            "vss_vip_columns": int(jog_res.stats["vss_vip_columns"]),
+            "surface_horizontal_straps": int(jog_res.stats["surface_horizontal_straps"]),
+            "surface_vertical_c_jogs": int(jog_res.stats["surface_vertical_c_jogs"]),
+            "surface_vertical_s_jogs": int(jog_res.stats["surface_vertical_s_jogs"]),
+            "upper_bu_vias_total": int(jog_res.stats["upper_bu_vias_total"]),
+        }
+
     emib_boxes = list(U9_EMIB_BRIDGES.values())
     emib_157 = [expand_bbox(b, 157.5) for b in emib_boxes]
     target_nets = {"VDDC0", "VDD_0P8_SRAM_CC0", "VSS"}

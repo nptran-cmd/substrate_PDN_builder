@@ -1,141 +1,241 @@
-# 💬 Example Prompts for Substrate PDN Builder (Agent 04 — PDN Architect)
+# 💬 Example Prompts Cookbook — Substrate PDN Builder (Agent 04: PDN Architect)
 
-Copy and paste any of the prompts below into your AI agent session (Gemini CLI, Antigravity / Jetski, or IDE agent) to trigger the corresponding skill workflow.
+Copy and paste any of the prompts below into your AI agent session (**Gemini CLI**, **Antigravity / Jetski**, or **IDE Copilot**) to trigger the corresponding 27-layer IC package substrate PDN routing, DRC verification, SVG sandbox visualization, or headless Cadence Allegro / APD (`.mcm`) build workflow.
 
 ---
 
-## 1. `base_lsc_bga_routing` — Step 3 (`BASE` / `BOTTOM` Layer) Empty-BGA Pocket `0201` LSC & 3-Option BGA Via Skill
+## 📋 Quick-Reference Scenario Index
 
-**What it does:** Step 3 (BASE / BOTTOM Layer) Empty-BGA Pocket 0201 LSC Max-Packing Placer & 3-Option BGA/LSC Via-Cluster Routing Skill for Agent 04 (PDN Architect). Learns empty BGA pockets on BASE, maximizes 0201 LSC placement (evaluating 0-deg and 90-deg grids + mixed-orientation remainder strips) while strictly enforcing BGA-SRO-to-LSC-SRO (>=500um) and LSC-SRO-to-LSC-SRO (>=175um or >=250um) rules, places 6 (12B->BASE) GCP uVias per 0201 LSC (3 per terminal pad), and routes BGA via clusters across 3 selectable patterns (Option 1: 4-Via Square 2x2, Option 2: 5-Via Quincunx, Option 3: 6-Via Hex Ring).
+| # | Scenario / Workflow | Primary Skill / Engine | Target Layers | Output Deliverables |
+| :- | :--- | :--- | :--- | :--- |
+| **1** | [Full-Package 24-Die, 76-Rail 27-Layer `.mcm` Build](#1-full-package-24-die-76-rail-27-layer-pdn-synthesis--mcm-build) | `full_package_all_dies_pdn.py` | `SURFACE` (`L01`) → `BASE` (`L27`) | `PDN_test_AllDies_AllRails_27Layer.mcm`, 3 SVGs, JSON DRC Audit |
+| **2** | [Quadrant / Corner Subset `.mcm` Build from `master.tag`](#2-quadrant--corner-subset-mcm-build-from-mastertag-parallel-execution) | `upper_left_corner_pdn.py` | `SURFACE` (`L01`) → `BASE` (`L27`) | `PDN_test_UpperLeft_*.mcm`, Fast-Ordered Recipe, DRC Audit |
+| **3** | [`VDDUC*` & `VDDCH*` Single-Rail 27-Layer Flow](#3-single-rail-vdduc-u5u8--vddch-u1u4-27-layer-pdn-routing) | `vdduc_vddch_routing_flow` | All 27 Layers | Per-die 27-layer recipe, SVG cross-section & top/bottom views |
+| **4** | [Co-Resident Dual-Rail `VDDC*` + `VDDSRAM*` Flow](#4-co-resident-dual-rail-compute-dies-vddc03--vdd_0p8_sram_cc03) | `vddc_vddram_routing_flow` | All 27 Layers | Carved W/E `SRAM` islands, `10F` bridge backbone, `3:1` jog straps |
+| **5** | [`HBM4E` 4-Rail + `HBMPHY` + `EMIB` 27-Layer Flow](#5-hbm4e-multi-rail-vddq-vddc-vddql-vpp-hbmphy--emib-routing) | `hbm_vdd_routing_flow` | All 27 Layers | West `SURFACE` gang-bars, East `EMIB` `C0`, `10F CSB` dogbones |
+| **6** | [`BASE` (`L27`) Curved Recess Cavity & `180°` `0201` LSCs](#6-base-l27-curved-mechanical-recess-cavity--180-0201-lsc-placement) | `base_lsc_bga_routing` | `10B..BASE` + `LSC_CAVITY` | `R=500 um` filleted cavities, `CONDUCTOR/BASE` LSCs, BGA clusters |
+| **7** | [Layer 1 (`SURFACE`) Bump-Via Ratio & Strapping Sweep](#7-layer-1-surface-parameterized-bump-via-ratios--strapping-directions) | `surface_layer1_routing` | `SURFACE` (`L01`) → `12F` (`L03`) | `FULL`, `4:2`, `5:2`, `3:1` VIP + `H`/`V`/`BOTH` 24 um straps |
+| **8** | [Core `PTH` (`4FCO ↔ 4BCO`) Density & `eDTC` KOZ Sweep](#8-core-pth-4fco--4bco-density-sweep--real-multi-family-edtc-koz) | `pth_4fco_4bco_routing` | `6F..4FCO` ↔ `4BCO..6B` | `5..8 PTH/mm²`, Staggered vs `90°` Ortho H/V, `eDTC` KOZ voids |
+| **9** | [Multi-Rail Co-Planar Polygon Splitter & Stack Pruner](#9-multi-rail-co-planar-polygon-splitter--atomic-via-stack-pruner) | `multi_rail_plane_polygon_splitter` | `12F` (`L03`) → `12B` (`L26`) | Dynamic planes, Static `150 um` guard bands, `0` dangling vias |
+| **10** | [Zero-Via-Overlap (`27` Layers) & `9F→5F`/`9B→5B` Audit](#10-strict-zero-via-overlap-27-conductor-layers--vertical-continuity-audit) | `full_package_all_dies_pdn.py` | All 27 Conductor Layers | Per-conductor pad clearance audit (`0` overlaps) & trunk check |
+| **11** | [Designer-Editable 27-Layer Recipe Template Runner](#11-designer-editable-27-layer-recipe-template-runner--headless-apd-batch) | `pdn_27layer_template_runner.py` | All 27 Layers | Custom `.mcm` from edited JSON/TXT templates |
+| **12** | [Stage 3 Visual Gate SVGs & 18-Test Regression Suite](#12-stage-3-visual-gate-svg-inspection--automated-regression-test-suite) | `test_agent04_suite.py` | Sandbox + Unit Tests | XML-validated SVGs + 18-test verification report |
+
+---
+
+## 1. Full-Package 24-Die, 76-Rail 27-Layer PDN Synthesis & `.mcm` Build
+
+**What it does:** Synthesizes all 24 dies across the entire package (`VDDUC0..3` on `U7, U5, U8, U6`; `VDDCH0..3` on `U2, U4, U3, U1`; `VDDC0..3` + `VDD_0P8_SRAM_CC0..3` on `U9, U12, U88, U10`; and all 12 HBM4E sites `MEM0..MEMB` on `U13..U24` + `U41..U52` EMIB bridges + `U98` anchors + `VSS`), generates Stage 3 Visual Gate SVGs and DRC audits (`8,176` polygons, `2,024,138` vias, `154,758` clines, `68` curved cavities, `1,919` `180°` `BASE` LSCs), and builds a brand-new `.mcm` in headless Cadence APD 25.1 while keeping `PDN_test.mcm` strictly read-only.
 
 ### Copy-Paste Prompts:
 
 ```text
-Use the `base_lsc_bga_routing` skill to step 3 (BASE / BOTTOM Layer) Empty-BGA Pocket 0201 LSC Max-Packing Placer & 3-Option BGA/LSC Via-Cluster Routing Skill for Agent 04 (PDN Architect) on my input files.
+I want to route VDDUC0..3, VDDCH0..3, VDDC0..3, SRAM0..3, and all 12 HBM rails across all 24 dies based on @agent04_pdn_architect/MCM_test/PDN_test.mcm and create a new .mcm file. Run the Stage 3 sandbox and DRC audit first, then proceed to Stage 4 .mcm creation.
 ```
 
 ```text
-Run `base_lsc_bga_routing` and summarize the key findings and generated outputs in a markdown table.
+Run the full-package 24-die 27-layer PDN synthesis in sandbox mode (--sandbox-only), verify 0 via pad overlaps across all 27 conductor layers and unbroken 9F->5F / 9B->5B VSS and VDD continuity, and generate the 3 full-package Visual Gate SVGs.
+```
+
+```text
+Execute Stage 4 headless Cadence APD .mcm build (--reuse-sandbox) from the verified 24-die master recipe into agent04_pdn_architect/MCM_test/PDN_test_AllDies_AllRails_27Layer.mcm and report the final database object and net-branch audit.
+```
+
+### Direct CLI Commands:
+```powershell
+# Stage 3 Sandbox Synthesis + Full DRC Audit + 3 Visual Gate SVGs (~3 min)
+$env:PYTHONPATH="."; python -m agent04_pdn_architect.cad_cli.full_package_all_dies_pdn --sandbox-only
+
+# Stage 4 Headless Cadence APD 25.1 .mcm Build reusing verified recipe
+$env:PYTHONPATH="."; python -m agent04_pdn_architect.cad_cli.full_package_all_dies_pdn --reuse-sandbox --timeout 7200
 ```
 
 ---
 
-## 2. `emib_csb_and_hbm_surface_router` — Step 2: `HBM` `SURFACE` Gang-Bar & `EMIB` `C0` / `10F CSB` Escape Router (`emib_csb_and_hbm_surface_router`)
+## 2. Quadrant / Corner Subset `.mcm` Build from `master.tag` (Parallel Execution)
 
-**What it does:** Step 2 Bifurcated HBM Fine-Pitch SURFACE Gang-Bar & EMIB C0 / 10F CSB Escape Router for Agent 04 (pdn_architect). Routes East EMIB overlap bumps onto C0 (VU30_19_60 / VU30_19_39 / VU30_19_35 with strict C0 exclusivity), groups West non-EMIB HBM 21 um fine-pitch paired double-rows into 84-90 um horizontal SURFACE copper gang-bars split cleanly around OBS_*/NC_*/Signal bumps (>=18.5 um clearance) with centerline V77_49_77_SURFACE_12F_01A drop vias, and escapes 10F CSB (C77_10F_DP_01A) pins within the max 2-stacked-via EMIB Rule #14 limit using lateral 8F dogbone step-overs into 6F power strips.
+**What it does:** Resolves the baseline `.mcm` from `@agent04_pdn_architect/MCM_test/master.tag`, synthesizes a targeted corner/quadrant subset of dies (e.g., Upper-Left Corner: `U1` [`VDDCH3`], `U5` [`VDDUC1`], `U12` [`VDDC1` + `VDD_0P8_SRAM_CC1`], and `U13` [`MEM5` upper-left HBM rails] or `U13,U14,U15`), reorders `VIA` and `CLINE` commands before `POLY_SHAPE` with deferred dynamic plane pouring (`axlShapeChangeDynamicType(shpObj t nil)`), and builds an isolated `.mcm` in parallel (~7–9 minutes) without conflicting with any other running `.mcm` build.
 
 ### Copy-Paste Prompts:
 
 ```text
-Run `emib_csb_and_hbm_surface_router` to audit die placement coordinates, bump pitch compliance, and HBM/C4 offset alignment.
+Can you create another MCM based on @agent04_pdn_architect/MCM_test/master.tag only for 1 VDDCH3 (U1), VDDUC1 (U5), VDDC1 and SRAM1 (U12), and the HBM on the upper-left corner rails (U13 / MEM5)? Run it in parallel in its own isolated output folder.
+```
+
+```text
+Create a new .mcm based on @agent04_pdn_architect/MCM_test/master.tag for the entire upper-left quadrant including U1 (VDDCH3), U5 (VDDUC1), U12 (VDDC1 + VDD_0P8_SRAM_CC1), and all 3 upper-left HBM dies (U13 MEM5, U14 MEM4, U15 MEM3).
+```
+
+### Direct CLI Commands:
+```powershell
+# Upper-Left Corner (U1 + U5 + U12 + U13 [MEM5]) — Sandbox + Fast Parallel .mcm Build (~8 min)
+$env:PYTHONPATH="."; python -m agent04_pdn_architect.cad_cli.upper_left_corner_pdn --hbm-dies U13
+
+# Upper-Left Quadrant with all 3 Left-Top HBMs (U13, U14, U15)
+$env:PYTHONPATH="."; python -m agent04_pdn_architect.cad_cli.upper_left_corner_pdn --hbm-dies U13,U14,U15 `
+  --out-dir agent04_pdn_architect/reports/upper_left_3hbm `
+  --out-mcm agent04_pdn_architect/MCM_test/PDN_test_UpperLeft_3HBM.mcm
 ```
 
 ---
 
-## 3. `full_27layer_apd_implementation` — Full 27-Layer (`SURFACE` L01 to `BASE` L27) APD Master Implementation Skill
+## 3. Single-Rail `VDDUC*` (`U5..U8`) & `VDDCH*` (`U1..U4`) 27-Layer PDN Routing
 
-**What it does:** End-to-end 27-layer (`SURFACE` L01 to `BASE` L27) PDN Architect Exporter and Cadence APD / Allegro SKILL Master Implementer (`apd_27layer_master_exporter.py` + `full_27layer_apd_implementer_batch.il`). Exports every single via (`166,223` instances across all 26 dielectric spans), `CLINE` trace (`7,169` instances), `0201` LSC symbol (`254` instances), and inner-layer copper plane (`24` shapes + `eDTC` cavity voids) with exact `.mcm` database padstack names, layer spans, and `(x_um, y_um)` locations for direct instantiation in Cadence APD.
+**What it does:** Executes the `vdduc_vddch_routing_flow` skill across all 27 layers (`SURFACE` `L01` → `BASE` `L27`) for any `LDB` (`U7: VDDUC0`, `U5: VDDUC1`, `U8: VDDUC2`, `U6: VDDUC3`) or `LDC` (`U2: VDDCH0`, `U4: VDDCH1`, `U3: VDDCH2`, `U1: VDDCH3`) die, including `100%` `SURFACE` VIP + `VSS` perimeter collar, `9F->5F` and `9B->5B` middle-buildup stitch trunks, concentric `4FCO` `eDTC` stacks, Core `PTH`/`PP` columns, and `BASE` curved recess `0201` LSCs.
 
 ### Copy-Paste Prompts:
 
 ```text
-Use the `full_27layer_apd_implementation` skill to end-to-end 27-layer (`SURFACE` L01 to `BASE` L27) PDN Architect Exporter and Cadence APD / Allegro SKILL Master Implementer (`apd_27layer_master_exporter on my input files.
+Use the `vdduc_vddch_routing_flow` skill to route the full 27-layer PDN for U7 (VDDUC0 and VSS) and U2 (VDDCH0 and VSS) with 100% SURFACE VIP, concentric 4FCO eDTC stacks, unbroken 9F->5F / 9B->5B trunks, and 180-degree alternating CONDUCTOR/BASE LSCs.
 ```
 
 ```text
-Run `full_27layer_apd_implementation` and summarize the key findings and generated outputs in a markdown table.
+Route U5 (VDDUC1) and U1 (VDDCH3) across all 27 layers using a 5:2 VDD:VSS bump-via ratio with HORIZONTAL 24 um SURFACE strapping, 7 PTH/mm² Core PTH density, and generate the cross-section and top/bottom transition SVGs.
 ```
 
 ---
 
-## 4. `hbm_vdd_routing_flow` — `HBM` (`U13` / `U13..U24`) Multi-Rail `VDD*` (+ `VPP*` & `VSS`) All-Layer (27-Layer) PDN Routing Flow
+## 4. Co-Resident Dual-Rail Compute Dies `VDDC0..3` + `VDD_0P8_SRAM_CC0..3`
 
-**What it does:** End-to-end (A-to-Z) 27-layer (`SURFACE` L01 through `BASE` L27) Multi-Rail HBM4E PDN routing flow for `U13` (`MEM5`: `VDDQ_0P85_HBM_MEM5`, `VDDC_1P0_HBM_MEM5`, `VDDQL5`, `VPP_1P8_HBM_MEM5` + Kelvin `OBS_*`/`SNS_*` pairs + `VSS`) and all 12 `HBM4E_MICRON_NOMINAL_BC_A0` sites (`U13..U24`, `MEM0..MEMB`). Learned directly from `HH_Nguyen_2026-1023_1900_TO_v8_dump.txt` and enforcing full EMIB-T Design Rules (`U41..U52` `LAVA_BRIDGE_22/23` `C0` exclusivity, `12F/11F` `157.5 um` cavity KOZ, `10F` `150 um` guard ring + `372 um` `CSB` clearance, `4FCO` `1,000 um` `eDTC`-to-EMIB, and `BASE` Rule #19 `LSC` outside EMIB die shadow) plus `BASE` Mechanical Cavity Recess (`LSC_CAVITY` `Codes A–K` + `Slide 11`) rules.
+**What it does:** Executes the `vddc_vddram_routing_flow` skill on the `LDA` compute dies (`U9: VDDC0 + VDD_0P8_SRAM_CC0`, `U12: VDDC1 + VDD_0P8_SRAM_CC1`, `U88: VDDC2 + VDD_0P8_SRAM_CC2`, `U10: VDDC3 + VDD_0P8_SRAM_CC3`), carving West and East `VDDSRAM` islands out of the main `VDDC` planes (`>=50 um` BU / `>=67.5 um` Core/PP/GCP split gaps), bridging West-to-East `VDDSRAM` on `10F`, routing `3:1` vertical jog straps on `SURFACE`, and splitting `BASE` recess pockets between `VDDC` and `VDDSRAM` LSCs.
 
 ### Copy-Paste Prompts:
 
 ```text
-Run `hbm_vdd_routing_flow` to audit die placement coordinates, bump pitch compliance, and HBM/C4 offset alignment.
+Use the `vddc_vddram_routing_flow` skill to synthesize the 27-layer co-resident dual-rail PDN for U9 (VDDC0 + VDD_0P8_SRAM_CC0 + VSS), including the 3:1 vertical jog SURFACE strapping, 10F West-to-East SRAM bridge backbone, real N24792-018 eDTC keepout voids, and co-pocket BASE LSCs.
+```
+
+```text
+Route all 4 LDA compute dies (U9, U12, U88, U10) for VDDC0..3 and VDD_0P8_SRAM_CC0..3, verify >=50 um BU and >=67.5 um Core/PP/GCP polygon split clearances, and export the per-layer SVG overview.
 ```
 
 ---
 
-## 5. `multi_rail_plane_polygon_splitter` — Step 1: Multi-Rail Co-Planar Polygon Splitter (`multi_rail_plane_polygon_splitter`)
+## 5. `HBM4E` Multi-Rail (`VDDQ`, `VDDC`, `VDDQL`, `VPP`, `HBMPHY` + `EMIB`) Routing
 
-**What it does:** Step 1 Multi-Rail Co-Planar Polygon Splitter & (x, y, layer) Net-Ownership Stack Pruner for Agent 04 (pdn_architect). Synthesizes N-rail co-planar voltage islands across all 24 inner layers (e.g., LDA VDDC0 + carved W/E VDD_0P8_SRAM_CC0 islands, and HBM 4-strip VPP | VDDC | VDDQ | VDDQL5 + E-comb 8F VPP collector), enforces >=50.0 um BU and >=67.5 um Core/PP/GCP split clearances, subtracts EMIB (157.5 / 200 / 372 um) & 4FCO..4BCO eDTC (517.5 um) keepout voids, builds an O(1) point-in-polygon net-ownership index for atomic via stack pruning (0 wrong-rail landings, 0 dangling vias), and maps co-pocket CONDUCTOR/BASE LSCs with 180-deg cap-to-cap alternation.
+**What it does:** Combines `hbm_vdd_routing_flow` and `emib_csb_and_hbm_surface_router` to route any or all 12 `HBM4E` sites (`U13..U24`, `MEM0..MEMB`) and their `EMIB` bridges (`U41..U52`):
+- **West non-EMIB `21 um` fine-pitch bumps:** Grouped into `84–90 um` horizontal `SURFACE` copper gang-bars split cleanly around `OBS_*`/`NC_*`/Signal bumps (`>=18.5 um` gap) with centerline `SURFACE->12F` drop vias.
+- **East `EMIB` overlap bumps:** Routed onto `C0` (`VU30_19_60_SURFACE_C0_01B` / `VU30_19_35_SURFACE_C0_01B`) with strict `C0` exclusivity and `157.5 um` `12F/11F` bridge cavity keepouts.
+- **`10F CSB` (`C77_10F_DP_01A`) pins:** Escaped within the max 2-stacked-via EMIB Rule #14 limit via lateral `8F` dogbones into `6F` power strips.
+- **4-Strip Co-Planar Inner Planes:** `VPP | VDDC | VDDQ | VDDQL` + `8F` E-comb `VPP` collector + `VDD_0P75_HBMPHY_UC*` tabs.
 
 ### Copy-Paste Prompts:
 
 ```text
-Use the `multi_rail_plane_polygon_splitter` skill to step 1 Multi-Rail Co-Planar Polygon Splitter & (x, y, layer) Net-Ownership Stack Pruner for Agent 04 (pdn_architect) on my input files.
+Use `hbm_vdd_routing_flow` and `emib_csb_and_hbm_surface_router` to route U13 (MEM5: VDDQ_0P85_HBM_MEM5, VDDC_1P0_HBM_MEM5, VDDQL5, VPP_1P8_HBM_MEM5, VDD_0P75_HBMPHY_UC5, and VSS) with West SURFACE copper gang-bars, East U41 EMIB C0 routing, and 10F CSB lateral 8F dogbone escapes.
 ```
 
 ```text
-Run `multi_rail_plane_polygon_splitter` and summarize the key findings and generated outputs in a markdown table.
+Synthesize Step 1 + Step 2 for both U9 (VDDC0 + SRAM0) and U13 (HBM MEM5 4-Rail) together, verify 0 open 10F CSB pins and 0 EMIB KOZ violations, and generate a new Cadence APD .mcm file.
 ```
 
 ---
 
-## 6. `pth_4fco_4bco_routing` — Step 2 (`4FCO` $\leftrightarrow$ `4BCO`) Core PTH & Prepreg Via-Stack Skill
+## 6. `BASE` (`L27`) Curved Mechanical Recess Cavity & `180°` `0201` LSC Placement
 
-**What it does:** Step 2 (4FCO <-> 4BCO) Core PTH & Prepreg Via-Stack Routing Skill for Agent 04 (PDN Architect). Solves staggered or 90-degree orthogonal (H&V aligned) same-net/diff-net PTH pitches for any user PTH density (5, 6, 7, 8 PTH/mm²), verifies Same-Net (>=270um) and Diff-Net (>=432.5um) pitch rules, strictly excludes PTHs/vias from all 4FCO eDTC Cavity/Guard/Inner-Core Keep-Out Zones (Body + 632.5um), and synthesizes 1-Stacked or 2-Stacked Prepreg vias (4FCO->3FCI->2FCI & 2BCI->3BCI->4BCO) matched to each layer's assigned VDD/VSS polarity.
+**What it does:** Learns non-rectangular empty BGA pockets on `BASE` (`L27`), synthesizes `R = 500 um` filleted curved mechanical recess cavities (`CAVITY/BASE` and `SUBSTRATE GEOMETRY/recess_cavity_pdn`) enforcing `>=250 um` BGA-pad-to-cavity, `>=225 um` LSC-body-to-cavity, and `178/203 um` outer copper KOZ rules, instantiates logical discrete `0201` LSC components strictly on `CONDUCTOR/BASE` (`Pin 1 = VDD_RAIL`, `Pin 2 = VSS`) with **`180°` cap-to-cap polarity alternation** (`0° <-> 180°` across vertical columns, `90° <-> 270°` on horizontal remainder strips), and routes 3-option BGA via clusters (`4-Via Square 2x2`, `5-Via Quincunx`, or `6-Via Hex Ring`).
 
 ### Copy-Paste Prompts:
 
 ```text
-Use the `pth_4fco_4bco_routing` skill to step 2 (4FCO <-> 4BCO) Core PTH & Prepreg Via-Stack Routing Skill for Agent 04 (PDN Architect) on my input files.
+Use the `base_lsc_bga_routing` skill and `curved_recess_and_lsc_engine.py` to synthesize all curved BASE mechanical recess cavities (R=500 um, >=250 um BGA-to-cavity, >=225 um LSC-to-cavity) and pack 0201 LSCs on CONDUCTOR/BASE with 180-degree cap-to-cap polarity alternation and Pin 1 = VDD* / Pin 2 = VSS net assignments.
 ```
 
 ```text
-Run `pth_4fco_4bco_routing` and summarize the key findings and generated outputs in a markdown table.
+Run a full BASE curved recess cavity and 180-degree LSC placement audit across all 68 package pockets, generate the high-resolution BASE inspection SVG showing BGA SROs, cavity contours, and LSC Pin-1/Pin-2 polarities, and verify 0 DRC violations.
+```
+
+### Direct CLI Command:
+```powershell
+$env:PYTHONPATH="."; python -m agent04_pdn_architect.cad_cli.curved_recess_and_lsc_engine
 ```
 
 ---
 
-## 7. `surface_layer1_routing` — Layer 1 (`SURFACE` / `TOP`) Parameterized Bump-Via & Trace-Ganging Skill
+## 7. Layer 1 (`SURFACE`) Parameterized Bump-Via Ratios & Strapping Directions
 
-**What it does:** Layer 1 (SURFACE / TOP) Parameterized Die Bump-Via & Trace-Ganging Skill for Agent 04 (PDN Architect). Routes any target RefDes (e.g., U7) on SURFACE (12Cu) with either Full Via-on-Bump (100% VIP) or any user-specified M:N VDD:VSS via ratio (e.g., 4:2, 5:2, 3:1) and strapping direction (VERTICAL, HORIZONTAL, or BOTH 2D H+V), connecting un-via'd bumps to adjacent same-net via'd bumps via DRC-clean 24um SURFACE CLINE straps, exporting XML-validated SVGs and executing O(N) SKILL batch creation in Cadence Allegro / APD (.mcm).
+**What it does:** Routes any die on `SURFACE` (`L01`) with either **Full Via-on-Bump (`FULL` 100% VIP)** or any user-specified **`M:N` (`VDD:VSS`) bump-via ratio** (`4:2`, `5:2`, `3:1`) and strapping direction (`HORIZONTAL`, `VERTICAL`, or `BOTH` 2D orthogonal grid), strapping un-via'd bumps to adjacent same-net via'd bumps with `24 um` `SURFACE` `CLINE` traces while maintaining `>=16.5 um` edge-to-edge clearance to opposite-net bumps.
 
 ### Copy-Paste Prompts:
 
 ```text
-Use the `surface_layer1_routing` skill to run a full Open/Short and 3D Die/Bridge/BGA connectivity DRC check on `path/to/design.mcm` and build an interactive HTML5 DRC viewer.
+Use the `surface_layer1_routing` skill on U7 (VDDUC0 and VSS) to compare 100% Full VIP against a 5:2 VDD:VSS bump-via ratio with HORIZONTAL, VERTICAL, and BOTH 2D 24 um SURFACE strapping, and generate side-by-side comparison SVGs.
 ```
 
 ```text
-Check `path/to/design.mcm` for degassing-hole copper overlap and reference-plane split crossings, and inject DRC bowtie markers into Allegro.
+Route U9 (VDDC0, VDD_0P8_SRAM_CC0, and VSS) on SURFACE using a 3:1 vertical jog strapping pattern so every un-via'd bump is strapped to a same-net SURFACE->12F microvia with >=16.5 um clearance.
 ```
 
 ---
 
-## 8. `vddc_vddram_routing_flow` — `VDDC*` and `VDDRAM` (`VDD_0P8_SRAM_CC*`) All-Layer (27-Layer) PDN Routing Flow
+## 8. Core `PTH` (`4FCO ↔ 4BCO`) Density Sweep & Real Multi-Family `eDTC` KOZ
 
-**What it does:** End-to-end (A-to-Z) 27-layer (`SURFACE` L01 through `BASE` L27) Co-Resident Dual-Power-Rail PDN routing flow for `VDDC*` (`VDDC0..3`) and `VDDSRAM` (`VDD_0P8_SRAM_CC0..3` + Kelvin `OBS_*`/`SNS_*` pairs) with `VSS` return on the `LDA` compute dies (`U9, U12, U88, U10` — `HUTTON_HILL_LDA_BC_A0`), learned directly from `HH_Nguyen_2026-1023_1900_TO_v8_dump.txt` and enforcing full EMIB-T Design Rules (`C0` exclusivity, `12F/11F` `157.5 um` cavity KOZ, `10F` `150 um` guard ring + `372 um` CSB clearance, `4FCO` `1,000 um` `eDTC`-to-EMIB, and `BASE` Rule #19 `LSC` outside EMIB bridge shadow) plus `BASE` Mechanical Cavity Recess (`LSC_CAVITY` `Codes A–K` + `Slide 11`) rules.
+**What it does:** Sweeps Core Plated-Through-Hole (`PTH`, `V210_110_210_4FCO_4BCO_01A`) densities (`5, 6, 7, 8 PTH/mm²`) and grid topologies (**Staggered Hexagonal** vs. **`90°` Orthogonal Horizontal/Vertical Aligned**) across `4FCO <-> 4BCO`, enforces Same-Net (`>=270 um`) and Diff-Net (`>=432.5 um`) pitch rules, carves exact multi-family `eDTC` keepout voids (`N24792-018` `144p`, `N24792-017` `48p`, `N24792-016` `24p`: silicon die + `300 um` cavity + `150 um` guard band + `67.5 um` gap), and synthesizes 1-Stack or 2-Stack Prepreg (`4FCO->3FCI->2FCI` & `2BCI->3BCI->4BCO`) transitions.
 
 ### Copy-Paste Prompts:
 
 ```text
-Use the `vddc_vddram_routing_flow` skill to end-to-end (A-to-Z) 27-layer (`SURFACE` L01 through `BASE` L27) Co-Resident Dual-Power-Rail PDN routing flow for `VDDC*` (`VDDC0 on my input files.
+Use the `pth_4fco_4bco_routing` skill on U7 (VDDUC0 / VSS) to sweep Core PTH densities of 5, 6, 7, and 8 PTH/mm² across both Staggered and 90-degree Orthogonal H/V patterns, subtract all 4FCO eDTC keepouts, and generate a 4-panel density comparison SVG and summary table.
 ```
 
 ```text
-Run `vddc_vddram_routing_flow` and summarize the key findings and generated outputs in a markdown table.
+Compare 1-Stack vs. 2-Stack Prepreg via transitions (4FCO->3FCI->2FCI and 2BCI->3BCI->4BCO) at 6 PTH/mm² and verify that no Core PTH has more than 5 stacked buildup/prepreg vias landing on it.
 ```
 
 ---
 
-## 9. `vdduc_vddch_routing_flow` — `VDDUC` and `VDDCH` All-Layer (27-Layer) PDN Routing Flow
+## 9. Multi-Rail Co-Planar Polygon Splitter & Atomic Via Stack Pruner
 
-**What it does:** End-to-end (A-to-Z) 27-layer (`SURFACE` L01 through `BASE` L27) PDN routing flow for `VDDUC*` (`VDDUC0..3` on `LDB` dies `U5..U8`) and `VDDCH*` (`VDDCH0..3` on `LDC` dies `U1..U4`) with `VSS` return. Enforces parameterized `M:N` `SURFACE` bump-via ratios (`FULL`, `4:2`, `5:2`, `3:1`) with pure `HORIZONTAL`/`VERTICAL`/`BOTH` strapping, concentric `4FCO` `eDTC` & Core `PTH`/`PP` alignment, strict `4FCO..4BCO` `eDTC` KOZ (`300 um` cavity + `150 um` guard metal + `67.5 um` spacing), atomic `2-via` net-matched plane stack pruning (`0` overlaps, `0` dangling vias), `BASE` Mechanical Recess (`LSC_CAVITY` `R=500 um`, `250 um` BGA->Cav, `225 um` LSC->Cav, `178/203 um` Signal/Cu KOZ) `0201` LSC packing, and headless Cadence APD `.mcm` instantiation.
+**What it does:** Synthesizes `N`-rail co-planar voltage islands across all 24 inner layers (`C0, 12F..12B`), distinguishes **Dynamic** power/ground copper planes (`DYNAMIC`) from isolated **Static** `150 um` guard band rings (`STATIC_NET`) around `10F` EMIB cavities and `4FCO/4BCO` `eDTC` cavities, and builds an $O(1)$ `(x, y, layer)` net-ownership spatial index that atomically prunes every vertical via stack (`0` wrong-rail plane landings, `0` dangling vias).
 
 ### Copy-Paste Prompts:
 
 ```text
-Use the `vdduc_vddch_routing_flow` skill to end-to-end (A-to-Z) 27-layer (`SURFACE` L01 through `BASE` L27) PDN routing flow for `VDDUC*` (`VDDUC0 on my input files.
-```
-
-```text
-Run `vdduc_vddch_routing_flow` and summarize the key findings and generated outputs in a markdown table.
+Use `multi_rail_plane_polygon_splitter` to generate the 24 inner-layer co-planar polygons for U9 (VDDC0 + VDD_0P8_SRAM_CC0 + VSS) and U13 (VDDQ + VDDC + VDDQL + VPP + VSS), including Dynamic copper planes, Static 150 um EMIB/eDTC guard bands, and atomic via stack pruning.
 ```
 
 ---
+
+## 10. Strict Zero-Via-Overlap (`27` Conductor Layers) & Vertical Continuity Audit
+
+**What it does:** Runs `audit_via_continuity_and_zero_overlap` and `check_inter_domain_polygon_clearances` across every conductor layer (`SURFACE`, `C0`, `12F..1F`, `4FCO..4BCO`, `1B..12B`, `BASE`) using true per-layer padstack copper radii (`PADSTACK_CONDUCTOR_RADII`) so neither same-span duplicate vias nor staggered adjacent-span vias sharing a boundary conductor layer (`9F`, `8F`, `7F`, `6F`, `5F`, `5B`, `6B`, `7B`, `8B`, `9B`, `10B`, `11B`, `12B`) can ever overlap (`non_concentric_pad_overlap_count == 0`, `concentric_diff_net_short_count == 0`), and confirms unbroken `9F->5F` and `9B->5B` `VSS`/`VDD` vertical trunks across all domains.
+
+### Copy-Paste Prompts:
+
+```text
+Run a strict 27-conductor-layer zero-via-overlap and polygon clearance audit on my synthesized PDN recipe. Verify that duplicate_same_span_count == 0, non_concentric_pad_overlap_count == 0, concentric_diff_net_short_count == 0, and every domain has unbroken 9F->5F and 9B->5B VSS and VDD stitch columns.
+```
+
+---
+
+## 11. Designer-Editable 27-Layer Recipe Template Runner & Headless APD Batch
+
+**What it does:** Allows package designers to inspect or edit human-readable JSON/TXT 27-layer PDN templates (`task1_vdduc_vddch_27layer_template.json`, `task2_vddc_sram_27layer_template.json`, `task3_hbm_4rail_27layer_template.json`) and compile them directly into a new Cadence APD `.mcm` database using `pdn_27layer_template_runner.py` and `apd_unified_27layer_template_importer.il`.
+
+### Copy-Paste Prompts:
+
+```text
+Compile the 3 designer-editable 27-layer PDN templates (Task 1 VDDUC0+VDDCH0, Task 2 U9 VDDC0+SRAM0, and Task 3 U13 HBM 4-Rail) using `pdn_27layer_template_runner.py` and build a verified Cadence APD .mcm file.
+```
+
+### Direct CLI Command:
+```powershell
+$env:PYTHONPATH="."; python -m agent04_pdn_architect.templates.pdn_27layer_template_runner --task all --run-apd
+```
+
+---
+
+## 12. Stage 3 Visual Gate SVG Inspection & Automated Regression Test Suite
+
+**What it does:** Runs the 18-test automated verification suite (`test_agent04_suite.py`) covering Stage 1 input extraction, Stage 2 5-zone synthesis, Stage 3 XML-validated SVG generation, curved `BASE` recess cavity DRC, `180°` `CONDUCTOR/BASE` LSC alternation, multi-rail polygon splitting, and zero-via-overlap invariants.
+
+### Copy-Paste Prompts:
+
+```text
+Run the complete Agent 04 unit and integration test suite (`agent04_pdn_architect.tests.test_agent04_suite`) and report the pass/fail status of all 18 tests.
+```
+
+### Direct CLI Command:
+```powershell
+$env:PYTHONPATH="."; python -m unittest agent04_pdn_architect.tests.test_agent04_suite -v
+```

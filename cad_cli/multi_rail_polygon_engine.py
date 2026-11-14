@@ -875,6 +875,10 @@ class CavityRecord:
     corner_r_um: float = 500.0
     ext_koz_um: float = 178.0
     lsc_safe_in_um: float = 225.0
+    cavity_poly: List[Point] = field(default_factory=list)
+    outer_koz_poly: List[Point] = field(default_factory=list)
+    inner_safe_poly: List[Point] = field(default_factory=list)
+    is_non_rectangular: bool = False
 
 
 @dataclass

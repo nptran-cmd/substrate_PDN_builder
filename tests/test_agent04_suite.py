@@ -521,12 +521,14 @@ class TestAgent04PDNArchitect(unittest.TestCase):
         poly_lines = [ln for ln in rec_lines if ln.startswith("POLY_SHAPE|")]
         dyn_lines = [ln for ln in poly_lines if "|DYNAMIC|" in ln]
         guard_lines = [ln for ln in poly_lines if "|STATIC_GUARD|" in ln]
-        cav_lines = [ln for ln in rec_lines if ln.startswith("CAVITY|")]
+        cav_lines = [ln for ln in rec_lines if ln.startswith("POLY_CAVITY|") or ln.startswith("CAVITY|")]
+        lsc_place_lines = [ln for ln in rec_lines if ln.startswith("LSC_PLACE|")]
         self.assertGreater(len(dyn_lines), 540)
         self.assertEqual(len(guard_lines), 19)  # 3 EMIB 10F Guard Rings (U35,U45,U41) + 16 eDTC 4FCO/4BCO Guard Bands (8x2)
         self.assertTrue(all("__ISOLATED__" in ln for ln in guard_lines))
         self.assertEqual(len(cav_lines), 8)
-        self.assertTrue(all("|178.0|225.0" in ln for ln in cav_lines))
+        self.assertTrue(all(ln.startswith("POLY_CAVITY|") for ln in cav_lines))
+        self.assertGreaterEqual(len(lsc_place_lines), 225)
 
         # Verify real multi-family eDTC silicon die & KOZ dimensions (018=144p, 017=48p, 016=24p)
         import csv as _csv
@@ -554,6 +556,159 @@ class TestAgent04PDNArchitect(unittest.TestCase):
 
         for sk_name in ("multi_rail_plane_polygon_splitter", "emib_csb_and_hbm_surface_router"):
             self.assertTrue((self.out_dir / "skills" / sk_name / "SKILL.md").exists())
+
+    def test_15_u9_surface_3to1_vertical_jog_and_svg(self) -> None:
+        """Verify U9 (LDA: VDDC0 + VDD_0P8_SRAM_CC0 + VSS) 3:1 partial-VIP + vertical C/S-jog SURFACE routing & SVG."""
+        import csv as _csv
+        import xml.etree.ElementTree as ET
+        from agent04_pdn_architect.cad_cli.u9_vddc_sram_surface_3to1_jog_router import (
+            render_u9_surface_3to1_inspection_svg,
+            route_u9_vddc0_sram0_vss_3to1_vertical_jog,
+        )
+
+        u9_csv = self.out_dir / "stage1_inputs" / "u9_full_pins.csv"
+        with u9_csv.open("r", encoding="utf-8") as fh:
+            u9_pins = list(_csv.DictReader(fh))
+
+        res = route_u9_vddc0_sram0_vss_3to1_vertical_jog(u9_pins, ratio_str="3:1", trace_width_um=15.0, min_gap_um=15.0)
+        self.assertTrue(res.drc_audit["drc_pass"])
+        self.assertEqual(res.drc_audit["pad_to_trace_violation_count"], 0)
+        self.assertEqual(res.drc_audit["trace_to_trace_violation_count"], 0)
+        self.assertEqual(res.drc_audit["vips_inside_emib_157_koz"], 0)
+        self.assertEqual(res.drc_audit["unconnected_c4_bumps_total"], 0)
+        self.assertGreaterEqual(res.drc_audit["min_pad_to_trace_gap_um"], 15.0)
+        self.assertGreaterEqual(res.drc_audit["min_trace_to_trace_gap_um"], 15.0)
+
+        per_net = res.stats["per_net"]
+        # Neither VDDC0 nor VDD_0P8_SRAM_CC0 nor VSS uses 100% full via-on-bump:
+        self.assertTrue(68.0 <= per_net["VDDC0"]["vip_pct"] <= 78.0)
+        self.assertTrue(68.0 <= per_net["VDD_0P8_SRAM_CC0"]["vip_pct"] <= 78.0)
+        self.assertTrue(22.0 <= per_net["VSS"]["vip_pct"] <= 30.0)
+        self.assertGreater(per_net["VDD_0P8_SRAM_CC0"]["vertical_c_jogs"], 200)
+        self.assertGreater(per_net["VDDC0"]["vertical_c_jogs"], 2000)
+        self.assertGreater(per_net["VSS"]["vertical_c_jogs"], 7000)
+
+        svg_path = self.out_dir / "pdn_sandbox" / "mockup_U9_SURFACE_VDDC0_SRAM0_3to1_VerticalJog.svg"
+        render_u9_surface_3to1_inspection_svg(res, svg_path)
+        self.assertTrue(svg_path.exists())
+        ET.fromstring(svg_path.read_bytes())
+
+    def test_16_curved_nonrect_recess_and_lsc_placement(self) -> None:
+        """Verify curved BGA-following non-rectangular recess (Inverted-T, L-shape, staggered) & 180-deg LSC placement."""
+        import xml.etree.ElementTree as ET
+        from agent04_pdn_architect.cad_cli.curved_recess_and_lsc_engine import run_curved_recess_demo_and_audit
+
+        res = run_curved_recess_demo_and_audit(self.workspace)
+        self.assertTrue(res["all_drc_pass"])
+        pks = res["pockets"]
+        self.assertGreaterEqual(pks["U9_CAV_5_NW_TShape"]["placed_lsc_count"], 25)
+        self.assertGreaterEqual(pks["U2_VDDCH0_NE_LShape"]["placed_lsc_count"], 31)
+        self.assertGreaterEqual(pks["U13_CAV_1_Staggered_PocketA"]["placed_lsc_count"], 27)
+        self.assertEqual(pks["U9_CAV_1_East_CoPocket"]["placed_lsc_count"], 51)
+        for pk_metrics in pks.values():
+            self.assertTrue(pk_metrics["drc_pass"])
+            self.assertGreaterEqual(pk_metrics["min_bga_sro_to_cav_um"], 250.0)
+            self.assertGreaterEqual(pk_metrics["min_bga_cu_to_cav_um"], 178.0)
+            self.assertGreaterEqual(pk_metrics["min_lsc_sro_to_cav_um"], 225.0)
+            self.assertGreaterEqual(pk_metrics["min_lsc_sro_to_sro_um"], 250.0)
+            self.assertEqual(pk_metrics["emib_shadow_violations"], 0)
+
+        svg_p = Path(res["svg_path"])
+        self.assertTrue(svg_p.exists())
+        ET.fromstring(svg_p.read_bytes())
+
+    def test_17_all_3_tasks_curved_recess_and_lsc(self) -> None:
+        """Verify curved BGA-following recess (POLY_CAVITY) & 180-deg LSC placement applied across all 3 PDN tasks."""
+        import xml.etree.ElementTree as ET
+        from agent04_pdn_architect.cad_cli.curved_recess_and_lsc_engine import (
+            synthesize_all_3_tasks_curved_recess_and_lscs,
+        )
+
+        rep = synthesize_all_3_tasks_curved_recess_and_lscs(self.workspace)
+        self.assertTrue(rep["all_3_tasks_drc_pass"])
+        self.assertEqual(rep["total_pockets_synthesized"], 12)  # 4 Task1 + 6 Task2 + 2 Task3
+
+        # Task 1: U7 VDDUC0 (43 + 43 with R=508um corner fillets) + U2 VDDCH0 (36 + 32) = 154 LSCs
+        self.assertGreaterEqual(rep["task1_vdduc_vddch"]["total_lscs"], 152)
+        # Task 2: U9 VDDC0 + VDD_0P8_SRAM_CC0 (6 pockets = 196 LSCs, incl. 40 SRAM0)
+        self.assertEqual(rep["task2_vddc_sram"]["total_lscs"], 196)
+        self.assertGreaterEqual(rep["task2_vddc_sram"]["lsc_by_rail"].get("VDD_0P8_SRAM_CC0", 0), 36)
+        # Task 3: U13 HBM4E Pocket A (VDDC+VDDQ) + Pocket B (VDDQL5) >= 33 LSCs
+        self.assertGreaterEqual(rep["task3_hbm_4rail"]["total_lscs"], 33)
+        self.assertEqual(rep["task3_hbm_4rail"]["lsc_by_rail"].get("VDDQL5", 0), 6)
+
+        for tkey in ("task1_vdduc_vddch", "task2_vddc_sram", "task3_hbm_4rail"):
+            svg_p = Path(rep[tkey]["svg_path"])
+            rec_p = Path(rep[tkey]["recipe_path"])
+            self.assertTrue(svg_p.exists())
+            self.assertTrue(rec_p.exists())
+            ET.fromstring(svg_p.read_bytes())
+            self.assertIn("POLY_CAVITY|", rec_p.read_text(encoding="utf-8"))
+
+    def test_18_designer_27layer_templates_all_3_tasks(self) -> None:
+        """Verify designer-editable 27-layer JSON templates, DRC validator, and full 3-task compiler."""
+        import copy
+        import json
+        import xml.etree.ElementTree as ET
+        from agent04_pdn_architect.templates.pdn_27layer_template_runner import (
+            compile_all_3_task_templates,
+            implement_sandbox_to_mcm_with_confirmation,
+            validate_27layer_template_config,
+        )
+
+        tpl_dir = self.out_dir / "templates"
+        for fname in (
+            "task1_vdduc_vddch_27layer_template.json",
+            "task2_vddc_sram_27layer_template.json",
+            "task3_hbm_4rail_27layer_template.json",
+        ):
+            cfg = json.loads((tpl_dir / fname).read_text(encoding="utf-8"))
+            self.assertEqual(len(cfg["stackup_all_27_layers"]), 27)
+            self.assertEqual(validate_27layer_template_config(cfg), [])
+
+            # Verify validator catches unsafe edits (e.g. overwriting PDN_test.mcm or BU split < 50um)
+            bad_cfg = copy.deepcopy(cfg)
+            bad_cfg["design_io"]["output_mcm_path"] = bad_cfg["design_io"]["source_mcm_readonly"]
+            bad_cfg["stackup_all_27_layers"][2]["split_gap_um"] = 30.0
+            errs = validate_27layer_template_config(bad_cfg)
+            self.assertGreaterEqual(len(errs), 2)
+
+        master = compile_all_3_task_templates(self.workspace)
+        self.assertTrue(master["all_3_templates_valid_and_drc_clean"])
+        for tk in ("task1", "task2", "task3"):
+            t_res = master[tk]
+            self.assertTrue(t_res["drc_all_pass"])
+            self.assertEqual(len(t_res["layer_by_layer_27_inventory"]), 27)
+            self.assertTrue(Path(t_res["master_recipe_path"]).exists())
+            self.assertTrue(Path(t_res["apd_headless_launcher_bat"]).exists())
+            gate_p = Path(t_res["confirmation_gate_json"])
+            self.assertTrue(gate_p.exists())
+            gate_obj = json.loads(gate_p.read_text(encoding="utf-8"))
+            self.assertEqual(gate_obj["gate_status"], "READY_FOR_FINAL_HUMAN_CONFIRMATION")
+            ET.fromstring(Path(t_res["stackup_summary_svg"]).read_bytes())
+            ET.fromstring(Path(t_res["base_curved_recess_svg"]).read_bytes())
+
+        # Verify Final Confirmation Gate strictly blocks .mcm implementation without confirmation token!
+        t2_cfg = tpl_dir / "task2_vddc_sram_27layer_template.json"
+        with self.assertRaises(RuntimeError) as ctx:
+            implement_sandbox_to_mcm_with_confirmation(
+                t2_cfg,
+                workspace=self.workspace,
+                confirm_token="",
+                interactive=False,
+                dry_run_preflight_only=True,
+            )
+        self.assertIn("FINAL_CONFIRMATION_REQUIRED", str(ctx.exception))
+
+        preflight = implement_sandbox_to_mcm_with_confirmation(
+            t2_cfg,
+            workspace=self.workspace,
+            confirm_token="YES_IMPLEMENT_MCM",
+            interactive=False,
+            dry_run_preflight_only=True,
+        )
+        self.assertEqual(preflight["status"], "CONFIRMED_PREFLIGHT_DRY_RUN")
+        self.assertTrue(Path(preflight["scr_path"]).exists())
 
 
 if __name__ == "__main__":

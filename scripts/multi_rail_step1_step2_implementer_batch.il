@@ -108,9 +108,93 @@ procedure( pdnMrCreateHollowRingShape( ox1 oy1 ox2 oy2 orad ix1 iy1 ix2 iy2 irad
   )
 )
 
+procedure( pdnMrCreatePolyRingShape( outerPts innerPts targetLayer )
+  let( (oPath iPath oShp cRes)
+    when( outerPts && length(outerPts) >= 4
+      oPath = axlPathStart(outerPts 0.0)
+      oShp = car(errset(axlDBCreateOpenShape(oPath t targetLayer nil) nil))
+      when( oShp
+        when( innerPts && length(innerPts) >= 4
+          iPath = axlPathStart(innerPts 0.0)
+          errset(axlDBCreateVoid(oShp iPath) nil)
+        )
+        cRes = car(errset(axlDBCreateCloseShape(oShp) nil))
+      )
+    )
+    cRes
+  )
+)
+
+procedure( pdnMrEnsureLscDev( symName )
+  let( (devName devFile outP)
+    devName = strcat("LSC_DEV_" symName)
+    devFile = strcat(devName ".txt")
+    unless( isFile(devFile)
+      outP = outfile(devFile "w")
+      when( outP
+        fprintf(outP "(DEVICE FILE: %s)\nPACKAGE %s\nCLASS DISCRETE\nPINCOUNT 2\nEND\n" devName symName)
+        close(outP)
+      )
+    )
+    devName
+  )
+)
+
+procedure( pdnMrPinIsOnBase( pObj )
+  let( (seStr)
+    seStr = if( pObj && pObj->startEnd then upperCase(sprintf(nil "%L" pObj->startEnd)) else "" )
+    ((rexMatchp("BASE" seStr) || rexMatchp("BOTTOM" seStr)) && !rexMatchp("SURFACE" seStr))
+  )
+)
+
+procedure( pdnMrPlaceBaseLsc( refDes symName cx cy rotDeg p1Net p2Net netTbl )
+  let( (devType compObj plcRes placedSym p1Obj p2Obj pNum)
+    devType = pdnMrEnsureLscDev(symName)
+    compObj = axlDBFindByName('component refDes)
+    when( compObj && compObj->symbol
+      errset(axlDeleteObject(compObj->symbol) nil)
+    )
+    unless( compObj
+      errset(axlDBCreateComponent(refDes devType) nil)
+      unless( axlDBFindByName('component refDes)
+        errset(axlDBCreateComponent(refDes devType symName "DISCRETE") nil)
+      )
+    )
+    placedSym = nil
+    ; Mandatory rule: try mir=nil first and verify pin->startEnd lands on CONDUCTOR/BASE!
+    plcRes = errset(axlDBCreateSymbol(refDes list(float(cx) float(cy)) nil float(rotDeg)) nil)
+    when( plcRes && car(plcRes)
+      placedSym = if( listp(car(plcRes)) then car(car(plcRes)) else car(plcRes) )
+    )
+    when( placedSym && placedSym->pins && !pdnMrPinIsOnBase(car(placedSym->pins))
+      errset(axlDeleteObject(placedSym) nil)
+      placedSym = nil
+      plcRes = errset(axlDBCreateSymbol(refDes list(float(cx) float(cy)) t float(rotDeg)) nil)
+      when( plcRes && car(plcRes)
+        placedSym = if( listp(car(plcRes)) then car(car(plcRes)) else car(plcRes) )
+      )
+    )
+    when( placedSym && placedSym->pins && length(placedSym->pins) >= 2
+      pdnMrGetOrMakeNet(netTbl p1Net)
+      pdnMrGetOrMakeNet(netTbl p2Net)
+      p1Obj = nil
+      p2Obj = nil
+      foreach( p placedSym->pins
+        pNum = if( p->number then sprintf(nil "%s" p->number) else "" )
+        if( pNum == "1" then p1Obj = p else when( pNum == "2" p2Obj = p ) )
+      )
+      unless( p1Obj p1Obj = nth(0 placedSym->pins) )
+      unless( p2Obj p2Obj = nth(1 placedSym->pins) )
+      when( p1Obj errset(axlChangeNet(p1Obj p1Net) nil) )
+      when( p2Obj errset(axlChangeNet(p2Obj p2Net) nil) )
+    )
+    placedSym
+  )
+)
+
 procedure( pdnMrEnsureLibPaths()
   let( (libDir psmList padList devList)
-    libDir = "<cadence_library_dir>"
+    libDir = "G:/My Drive/HFC_TO_docs/Library"
     when( isDir(libDir)
       psmList = axlGetVariableList("psmpath")
       unless( member(libDir psmList) axlSetVariable("psmpath" cons(libDir psmList)) )
@@ -316,6 +400,61 @@ procedure( pdnImplementMultiRailStep1Step2Batch( recipePath saveDesign outMcmPat
                 axlDBCreatePath(pdnMrRoundedRectPath(cx1 cy1 cx2 cy2 rCav 25.0) recessLayer)
                 recessKozCnt = recessKozCnt + 1
                 cavCnt = cavCnt + 1
+              )
+
+              ; POLY_CAVITY|<id>|<cav_verts>|<outer_koz_verts>|<inner_safe_verts>
+              ; Smooth curved BGA-following non-rectangular Recess & KOZ contours!
+              ( rType == "POLY_CAVITY" && length(parts) >= 3
+                let( (cavPts kozPts safePts)
+                  cavPts  = pdnMrParseVertices(nth(2 parts))
+                  kozPts  = if( length(parts) >= 4 then pdnMrParseVertices(nth(3 parts)) else nil )
+                  safePts = if( length(parts) >= 5 then pdnMrParseVertices(nth(4 parts)) else nil )
+
+                  when( cavPts && length(cavPts) >= 4
+                    axlDBCreateShape(axlPathStart(cavPts 0.0) t "SUBSTRATE GEOMETRY/LSC_CAVITY")
+                    axlDBCreatePath(axlPathStart(cavPts 25.0) recessLayer)
+                    recessKozCnt = recessKozCnt + 1
+                    cavCnt = cavCnt + 1
+                  )
+                  when( kozPts && length(kozPts) >= 4 && cavPts && length(cavPts) >= 4
+                    pdnMrCreatePolyRingShape(kozPts cavPts recessLayer)
+                    axlDBCreatePath(axlPathStart(kozPts 25.0) recessLayer)
+                    recessKozCnt = recessKozCnt + 2
+                    when( axlIsLayer("ROUTE KEEPOUT/BASE")
+                      axlDBCreateShape(axlPathStart(kozPts 0.0) t "ROUTE KEEPOUT/BASE")
+                    )
+                  )
+                  when( safePts && length(safePts) >= 4 && cavPts && length(cavPts) >= 4
+                    pdnMrCreatePolyRingShape(cavPts safePts recessLayer)
+                    axlDBCreatePath(axlPathStart(safePts 20.0) recessLayer)
+                    recessKozCnt = recessKozCnt + 2
+                  )
+                )
+              )
+
+              ; LSC_DELETE|<refdes>
+              ( rType == "LSC_DELETE" && length(parts) >= 2
+                let( (cObj)
+                  cObj = axlDBFindByName('component nth(1 parts))
+                  when( cObj
+                    when( cObj->symbol errset(axlDeleteObject(cObj->symbol) nil) )
+                    errset(axlDeleteObject(cObj) nil)
+                  )
+                )
+              )
+
+              ; LSC_PLACE|<refdes>|<symName>|<cx>|<cy>|<rotDeg>|<p1Net>|<p2Net>
+              ( rType == "LSC_PLACE" && length(parts) >= 8
+                pdnMrPlaceBaseLsc(
+                  nth(1 parts)
+                  nth(2 parts)
+                  float(atof(nth(3 parts)))
+                  float(atof(nth(4 parts)))
+                  float(atof(nth(5 parts)))
+                  nth(6 parts)
+                  nth(7 parts)
+                  netTbl
+                )
               )
 
               ( rType == "VIA" && length(parts) >= 7

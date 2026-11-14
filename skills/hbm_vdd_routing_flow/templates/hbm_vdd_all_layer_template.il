@@ -35,6 +35,24 @@ procedure( pdnMakeRoundedRectRpathHbm( x1 y1 x2 y2 rad layerName )
   )
 )
 
+procedure( pdnParseCurvedVertsHbm( vertStr )
+  let( (pts firstPt xy x y)
+    pts = nil
+    firstPt = nil
+    foreach( p parseString(vertStr ";")
+      xy = parseString(p ",")
+      when( length(xy) >= 2
+        x = float(atof(nth(0 xy)))
+        y = float(atof(nth(1 xy)))
+        unless( firstPt firstPt = list(x y) )
+        pts = append1(pts list(x y))
+      )
+    )
+    when( firstPt && length(pts) >= 3 pts = append1(pts firstPt) )
+    pts
+  )
+)
+
 procedure( pdnRunHbmVddMasterRecipe( recipePath outMcmPath reportPath )
   let( (inPort outPort rawLine line fields recType netTbl padTbl openPlane
         countStripe countPlane countIsland countVoid countCav countLsc countVia countCline errCount
@@ -154,17 +172,45 @@ procedure( pdnRunHbmVddMasterRecipe( recipePath outMcmPath reportPath )
             )
           )
 
-          ( recType == "LSC_SYM"
-            let( (refDes symName mirFlag p1Net p2Net symRes symObj pinList p1 p2)
+          ( recType == "POLY_CAVITY" && length(fields) >= 3
+            let( (cavPts kozPts safePts rLyr oShp)
+              rLyr = "SUBSTRATE GEOMETRY/recess_cavity_pdn"
+              unless( axlIsLayer(rLyr) axlLayerCreateNonConductor(rLyr) )
+              unless( axlIsLayer("SUBSTRATE GEOMETRY/LSC_CAVITY") axlLayerCreateNonConductor("SUBSTRATE GEOMETRY/LSC_CAVITY") )
+              cavPts  = pdnParseCurvedVertsHbm(nth(2 fields))
+              kozPts  = if( length(fields) >= 4 then pdnParseCurvedVertsHbm(nth(3 fields)) else nil )
+              safePts = if( length(fields) >= 5 then pdnParseCurvedVertsHbm(nth(4 fields)) else nil )
+              when( cavPts && length(cavPts) >= 4
+                axlDBCreateShape(axlPathStart(cavPts 0.0) t "SUBSTRATE GEOMETRY/LSC_CAVITY")
+                axlDBCreatePath(axlPathStart(cavPts 25.0) rLyr)
+                countCav = countCav + 1
+              )
+              when( kozPts && length(kozPts) >= 4 && cavPts && length(cavPts) >= 4
+                oShp = car(errset(axlDBCreateOpenShape(axlPathStart(kozPts 0.0) t rLyr nil) nil))
+                when( oShp errset(axlDBCreateVoid(oShp axlPathStart(cavPts 0.0)) nil) errset(axlDBCreateCloseShape(oShp) nil) )
+                axlDBCreatePath(axlPathStart(kozPts 25.0) rLyr)
+                when( axlIsLayer("ROUTE KEEPOUT/BASE") axlDBCreateShape(axlPathStart(kozPts 0.0) t "ROUTE KEEPOUT/BASE") )
+              )
+              when( safePts && length(safePts) >= 4 && cavPts && length(cavPts) >= 4
+                oShp = car(errset(axlDBCreateOpenShape(axlPathStart(cavPts 0.0) t rLyr nil) nil))
+                when( oShp errset(axlDBCreateVoid(oShp axlPathStart(safePts 0.0)) nil) errset(axlDBCreateCloseShape(oShp) nil) )
+                axlDBCreatePath(axlPathStart(safePts 20.0) rLyr)
+              )
+            )
+          )
+
+          ( recType == "LSC_SYM" || recType == "LSC_PLACE"
+            let( (refDes symName mirFlag p1Net p2Net symRes symObj pinList p1 p2 isPlace)
               axlSetVariable("logic_edit_enabled" t)
+              isPlace = (recType == "LSC_PLACE")
               refDes = nth(1 fields)
               symName = nth(2 fields)
               cx = atof(nth(3 fields))
               cy = atof(nth(4 fields))
               rot = atof(nth(5 fields))
-              mirFlag = (nth(6 fields) == "MIRROR_YES")
-              p1Net = nth(7 fields)
-              p2Net = nth(8 fields)
+              mirFlag = (!isPlace && nth(6 fields) == "MIRROR_YES")
+              p1Net = nth(if( isPlace then 6 else 7 ) fields)
+              p2Net = nth(if( isPlace then 7 else 8 ) fields)
               unless( netTbl[p1Net] netTbl[p1Net] = or(axlDBFindByName('net p1Net) axlDBCreateNet(p1Net)) )
               unless( netTbl[p2Net] netTbl[p2Net] = or(axlDBFindByName('net p2Net) axlDBCreateNet(p2Net)) )
               let( (cwd dp devName devFile dfp)

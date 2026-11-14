@@ -695,12 +695,57 @@ def export_full_27layer_apd_implementation(
         w.writeheader()
         w.writerows(all_planes)
 
+    # Compute smooth curved BGA-following POLY_CAVITY contours for all U7 pockets on BASE!
+    from .curved_recess_and_lsc_engine import synthesize_curved_bga_recess_and_pack_lscs
+
+    s1_bga_csv = ws / "agent04_pdn_architect" / "stage1_inputs" / "bga_map.csv"
+    with s1_bga_csv.open("r", encoding="utf-8") as fh_b:
+        u7_all_bgas = list(csv.DictReader(fh_b))
+
+    by_pk: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for c in base_plan["placed_lscs"]:
+        by_pk[c["pocket_id"]].append(c)
+
+    u7_curved_cavs = []
+    u7_built_cav_polys: List[List[Tuple[float, float]]] = []
+    for pk_id_k, pk_caps in sorted(by_pk.items()):
+        seeds_k = [(float(c["x"]), float(c["y"])) for c in pk_caps]
+        cv_res = synthesize_curved_bga_recess_and_pack_lscs(
+            pocket_id=f"U7_{pk_id_k}",
+            seed_points=seeds_k,
+            bga_balls=u7_all_bgas,
+            default_vdd_net="VDDUC0",
+            existing_pocket_lscs=[
+                {
+                    "refdes": c["refdes"],
+                    "symbol_name": c["symbol_name"],
+                    "x_um": str(c["x"]),
+                    "y_um": str(c["y"]),
+                    "rotation": str(c["rot"]),
+                    "pin1_net": c["pin1_net"],
+                    "pin2_net": c["pin2_net"],
+                }
+                for c in pk_caps
+            ],
+            sro_to_sro_um=lsc_sro_rule_um,
+            other_cavity_polys=u7_built_cav_polys,
+            grid_step_um=22.0,
+        )
+        if cv_res.cavity_poly:
+            u7_built_cav_polys.append(cv_res.cavity_poly)
+            u7_curved_cavs.append(cv_res)
+
     master_recipe = out_dir / "U7_27Layer_APD_Master_Recipe.txt"
     with master_recipe.open("w", encoding="utf-8") as f:
         f.write(
             f"# AGENT04_FULL_27LAYER_APD_MASTER_RECIPE|REFDES=U7|SURFACE_RATIO={surface_ratio}|"
             f"PTH_DENSITY={pth_density_per_mm2}|PTH_PATTERN={pth_pattern}|BGA_CLUSTER_A={bga_cluster_a_option}\n"
         )
+        for cv in u7_curved_cavs:
+            c_str = ";".join(f"{x:.2f},{y:.2f}" for x, y in cv.cavity_poly)
+            k_str = ";".join(f"{x:.2f},{y:.2f}" for x, y in cv.outer_koz_poly)
+            s_str = ";".join(f"{x:.2f},{y:.2f}" for x, y in cv.inner_safe_poly)
+            f.write(f"POLY_CAVITY|{cv.pocket_id}|{c_str}|{k_str}|{s_str}\n")
         for c in base_plan["placed_lscs"]:
             f.write(
                 f"LSC_SYM|{c['refdes']}|{c['symbol_name']}|BOTTOM|{c['x']:.3f}|{c['y']:.3f}|{c['rot']:.1f}|"
