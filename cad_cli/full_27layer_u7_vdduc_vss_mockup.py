@@ -772,8 +772,13 @@ def render_4panel_transition_zoom_svg(
 
 
 def run_full_27layer_u7_mockup() -> Dict[str, Any]:
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_output_dir
+    except ImportError:
+        from pdn_paths import resolve_output_dir  # type: ignore
+
     ws = Path(__file__).resolve().parent.parent.parent
-    out_dir = ws / "pdn_sandbox"
+    out_dir = resolve_output_dir("pdn_sandbox")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Load U7 VDDUC0 & VSS bumps on L01 (SURFACE) + eDTC pins on L11 (4FCO)

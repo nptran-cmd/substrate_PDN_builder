@@ -14,8 +14,10 @@ Supports ingesting:
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -231,6 +233,72 @@ def scan_padstack_folder(padstack_folder: Optional[str | Path]) -> Dict[str, Lis
     return pad_map
 
 
+def find_mcm_template_dir(work_dir: Path) -> Optional[Path]:
+    """Locate the MCM_template subfolder inside work_dir (case-insensitive match)."""
+    wd = work_dir.resolve()
+    if not wd.is_dir():
+        return None
+    exact = wd / "MCM_template"
+    if exact.is_dir():
+        return exact
+    for entry in sorted(wd.iterdir(), key=lambda p: p.name.lower()):
+        if entry.is_dir() and entry.name.lower() == "mcm_template":
+            return entry
+    return None
+
+
+def _pick_newest_mcm(paths: List[Path]) -> Optional[Path]:
+    valid = [p for p in paths if p.is_file() and p.suffix.lower() == ".mcm"]
+    if not valid:
+        return None
+    valid.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return valid[0]
+
+
+def _read_master_tag_mcm(folder: Path) -> Optional[Path]:
+    master_tag = folder / "master.tag"
+    if not master_tag.is_file():
+        return None
+    for raw_ln in master_tag.read_text(encoding="utf-8", errors="ignore").splitlines():
+        cand_name = raw_ln.strip()
+        if cand_name.lower().endswith(".mcm"):
+            cand = folder / cand_name
+            if cand.is_file():
+                return cand
+    return None
+
+
+def resolve_mcm_in_work_dir(work_dir: Path) -> Optional[Path]:
+    """Find the original .mcm template in work_dir, prioritizing <work_dir>/MCM_template/ first."""
+    wd = work_dir.resolve()
+    if not wd.is_dir():
+        return None
+
+    # 1. Prioritize <work_dir>/MCM_template/ (origin template folder, never confused with built outputs)
+    tpl_dir = find_mcm_template_dir(wd)
+    if tpl_dir:
+        tagged = _read_master_tag_mcm(tpl_dir)
+        if tagged:
+            return tagged
+        direct_tpl = _pick_newest_mcm(list(tpl_dir.glob("*.mcm")))
+        if direct_tpl:
+            return direct_tpl
+        nested_tpl = _pick_newest_mcm(list(tpl_dir.glob("*/*.mcm")))
+        if nested_tpl:
+            return nested_tpl
+
+    # 2. Check master.tag or direct .mcm in work_dir root
+    tagged_root = _read_master_tag_mcm(wd)
+    if tagged_root:
+        return tagged_root
+    direct = _pick_newest_mcm(list(wd.glob("*.mcm")))
+    if direct:
+        return direct
+
+    # 3. Fallback one level down
+    return _pick_newest_mcm(list(wd.glob("*/*.mcm")))
+
+
 def run_stage1_prelearn(
     stackup_file: Optional[str] = None,
     design_rule_files: Optional[List[str]] = None,
@@ -238,8 +306,29 @@ def run_stage1_prelearn(
     mcm_path: Optional[str] = None,
     run_headless_mcm_learner: bool = False,
     output_index_path: str = "agent04_pdn_architect/reports/pdn_knowledge_index.json",
+    work_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Execute Stage 1 Pre-Learn indexing across Stackup, Design Rules, and Padstack Library."""
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_active_work_dir
+    except ImportError:
+        from pdn_paths import resolve_active_work_dir  # type: ignore
+
+    agent_dir = Path(__file__).resolve().parent.parent
+    repo_root = agent_dir.parent
+
+    eff_wd, is_custom_wd = resolve_active_work_dir(work_dir)
+    if not is_custom_wd and not work_dir and not os.environ.get("SUBSTRATE_WORK_DIR", "").strip():
+        eff_wd = None
+
+    if output_index_path == "agent04_pdn_architect/reports/pdn_knowledge_index.json" and is_custom_wd and eff_wd:
+        output_index_path = str(eff_wd / "stage1_inputs" / "pdn_knowledge_index.json")
+
+    if not mcm_path and eff_wd:
+        found_mcm = resolve_mcm_in_work_dir(eff_wd)
+        if found_mcm:
+            mcm_path = str(found_mcm)
+
     zones: Dict[str, List[str]] = {k: list(v) for k, v in DEFAULT_HFC_ZONES.items()}
     rules: Dict[str, Any] = dict(DEFAULT_DESIGN_RULES)
     pad_map: Dict[str, List[str]] = scan_padstack_folder(padstack_library_folder)
@@ -247,6 +336,8 @@ def run_stage1_prelearn(
         "layers_from_mcm": [],
         "symbols_from_mcm": [],
         "bga_pins_sampled": 0,
+        "source_mcm": mcm_path or "",
+        "working_dir": str(eff_wd) if eff_wd else str(repo_root),
     }
 
     if stackup_file and Path(stackup_file).exists():
@@ -274,10 +365,11 @@ def run_stage1_prelearn(
                 dr_rows = read_tabular_lines_from_any_format(dr_file)
                 rules = parse_design_rules_from_rows(dr_rows, rules)
 
+    out_p = Path(output_index_path)
+
     if run_headless_mcm_learner and mcm_path and Path(mcm_path).exists():
-        agent_dir = Path(__file__).resolve().parent.parent
         script_dir = agent_dir / "scripts"
-        reports_dir = agent_dir / "reports"
+        reports_dir = (eff_wd / "stage1_inputs") if is_custom_wd and eff_wd else (agent_dir / "reports")
         reports_dir.mkdir(parents=True, exist_ok=True)
         learned_txt = reports_dir / "pdn_mcm_learned.txt"
         report_txt = reports_dir / "pdn_prelearn_report.txt"
@@ -289,17 +381,29 @@ def run_stage1_prelearn(
             script_dir / "pdn_Pipeline_batch.il",
         ]
         runner = CadenceBatchRunner()
+        reports_dir_skill = runner.to_skill_path(reports_dir)
         scr_path = runner.create_scr_file(
             skill_loads=skill_loads,
-            skill_calls=['pdnDispatchBatchJob("PADSTACK_LEARN" "FALSE")'],
+            skill_calls=[
+                f'axlSetVariable("PDN_CWD" "{reports_dir_skill}")',
+                'pdnDispatchBatchJob("PADSTACK_LEARN" "FALSE")',
+            ],
             output_scr_path=reports_dir / "pdn_prelearn.scr",
         )
-        runner.run(
-            mcm_path=Path(mcm_path).resolve(),
-            scr_path=scr_path,
-            working_dir=reports_dir,
-            bypass_lock_readonly=True,
-        )
+        prev_pdn_cwd = os.environ.get("PDN_CWD")
+        os.environ["PDN_CWD"] = reports_dir_skill
+        try:
+            runner.run(
+                mcm_path=Path(mcm_path).resolve(),
+                scr_path=scr_path,
+                working_dir=reports_dir,
+                bypass_lock_readonly=True,
+            )
+        finally:
+            if prev_pdn_cwd is None:
+                os.environ.pop("PDN_CWD", None)
+            else:
+                os.environ["PDN_CWD"] = prev_pdn_cwd
         if learned_txt.exists():
             with learned_txt.open("r", encoding="utf-8", errors="ignore") as f:
                 for line in f:
@@ -334,7 +438,33 @@ def run_stage1_prelearn(
         "mcm_learned_summary": mcm_learned_summary,
     }
 
-    out_p = Path(output_index_path)
     out_p.parent.mkdir(parents=True, exist_ok=True)
     out_p.write_text(json.dumps(knowledge_index, indent=2), encoding="utf-8")
     return knowledge_index
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Stage 1 Pre-Learn & Multi-Format Data Indexing Engine")
+    parser.add_argument("--work-dir", default=None, help="Target project working folder (defaults to SUBSTRATE_WORK_DIR)")
+    parser.add_argument("--mcm", default=None, help="Path to target .mcm template (auto-detected from work-dir if omitted)")
+    parser.add_argument("--out-index", default="agent04_pdn_architect/reports/pdn_knowledge_index.json")
+    parser.add_argument("--stackup-file", default=None)
+    parser.add_argument("--design-rule", action="append", default=None)
+    parser.add_argument("--padstack-dir", default=None)
+    parser.add_argument("--run-apd", action="store_true", help="Run headless apd.exe PADSTACK_LEARN extractor")
+    args = parser.parse_args()
+
+    res = run_stage1_prelearn(
+        stackup_file=args.stackup_file,
+        design_rule_files=args.design_rule,
+        padstack_library_folder=args.padstack_dir,
+        mcm_path=args.mcm,
+        run_headless_mcm_learner=args.run_apd,
+        output_index_path=args.out_index,
+        work_dir=args.work_dir,
+    )
+    print(json.dumps({"status": res["status"], "source_mcm": res["mcm_learned_summary"].get("source_mcm"), "working_dir": res["mcm_learned_summary"].get("working_dir")}, indent=2))
+
+
+if __name__ == "__main__":
+    main()

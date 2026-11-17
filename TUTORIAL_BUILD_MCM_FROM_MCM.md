@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > **Safety-by-Design Architecture:**
 > 1. Your original `.mcm` database (for example [`PDN_test.mcm`](file:///<agent_workspace>/agent04_pdn_architect/MCM_test/PDN_test.mcm) or `HH_Nguyen_*_TO_v8.mcm`) is treated as **100% Read-Only**.
-> 2. `G:\My Drive\skill_source\SPB_Data\pcbenv\` is **never modified**.
+> 2. `<pcbenv_skill_dir>/` is **never modified**.
 > 3. Every PDN build MUST pass through the **Sandbox Simulation + SVG Visual Gate** (`--stage sandbox`) and an explicit **Final Confirmation Gate** (`--stage implement-mcm` requiring `YES_IMPLEMENT_MCM`) before a copied output `.mcm` is touched by Cadence APD (`apd.exe -nographic`).
 
 ---

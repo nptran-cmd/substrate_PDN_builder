@@ -31,6 +31,7 @@ import collections
 import csv
 import json
 import math
+import os
 import shutil
 import time
 import xml.etree.ElementTree as ET
@@ -92,6 +93,7 @@ from agent04_pdn_architect.cad_cli.multi_rail_polygon_engine import (
     synthesize_multi_rail_core_pth_and_pp,
     union_rect_boxes_to_polygons,
 )
+from agent04_pdn_architect.cad_cli.pdn_prelearn import resolve_mcm_in_work_dir
 from agent04_pdn_architect.cad_cli.step1_step2_u9_u13_validator import (
     _hexagonal_6via_offsets,
     _octagonal_8via_offsets,
@@ -1444,7 +1446,7 @@ def _execute_stage4_apd_build(
 ) -> Dict[str, Any]:
     out_mcm = out_mcm_path.resolve()
     if src_mcm == out_mcm:
-        raise RuntimeError("SAFETY_LOCK: refusing to overwrite source PDN_test.mcm!")
+        raise RuntimeError(f"SAFETY_LOCK: refusing to overwrite source {src_mcm.name}!")
     out_mcm.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src_mcm, out_mcm)
     lck = out_mcm.with_name(out_mcm.name + ".lck")
@@ -1490,6 +1492,37 @@ def _execute_stage4_apd_build(
     return final_audit
 
 
+def _resolve_pdn_io_context(
+    src_mcm_path: Optional[Path] = None,
+    work_dir: Optional[str] = None,
+) -> Tuple[Optional[Path], bool, Path, Path]:
+    """Resolve active working folder, read-only origin .mcm (preferring <work_dir>/MCM_template), and Stage 1 dir."""
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_active_work_dir
+    except ImportError:
+        from pdn_paths import resolve_active_work_dir  # type: ignore
+
+    eff_wd, is_custom_wd = resolve_active_work_dir(work_dir)
+    if not is_custom_wd and not work_dir and not os.environ.get("SUBSTRATE_WORK_DIR", "").strip():
+        eff_wd_opt: Optional[Path] = None
+    else:
+        eff_wd_opt = eff_wd
+
+    if src_mcm_path is not None:
+        src_mcm = src_mcm_path.expanduser().resolve()
+    elif is_custom_wd and eff_wd:
+        wd_mcm = resolve_mcm_in_work_dir(eff_wd)
+        src_mcm = wd_mcm.resolve() if wd_mcm else (WORKSPACE / "agent04_pdn_architect" / "MCM_test" / "PDN_test.mcm").resolve()
+    else:
+        src_mcm = (WORKSPACE / "agent04_pdn_architect" / "MCM_test" / "PDN_test.mcm").resolve()
+
+    if is_custom_wd and eff_wd and (eff_wd / "stage1_inputs").is_dir():
+        stage1_dir = (eff_wd / "stage1_inputs").resolve()
+    else:
+        stage1_dir = (WORKSPACE / "agent04_pdn_architect" / "stage1_inputs").resolve()
+    return eff_wd_opt, is_custom_wd, src_mcm, stage1_dir
+
+
 def synthesize_full_package_all_dies(
     pins_csv: Path,
     out_dir: Path,
@@ -1497,12 +1530,14 @@ def synthesize_full_package_all_dies(
     out_mcm_path: Optional[Path] = None,
     timeout_sec: int = 1800,
     reuse_sandbox: bool = False,
+    src_mcm_path: Optional[Path] = None,
+    work_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     t0 = time.perf_counter()
     out_dir.mkdir(parents=True, exist_ok=True)
     recipe_file = out_dir / "AllDies_AllRails_27Layer_Master_Recipe.txt"
     audit_file = out_dir / "AllDies_AllRails_Sandbox_Audit.json"
-    src_mcm = (WORKSPACE / "agent04_pdn_architect" / "MCM_test" / "PDN_test.mcm").resolve()
+    _eff_wd, _is_custom, src_mcm, s1 = _resolve_pdn_io_context(src_mcm_path=src_mcm_path, work_dir=work_dir)
 
     if reuse_sandbox and recipe_file.exists() and audit_file.exists():
         sandbox_summary = json.loads(audit_file.read_text(encoding="utf-8"))
@@ -1512,8 +1547,6 @@ def synthesize_full_package_all_dies(
         if not all_ok:
             raise RuntimeError("Cached sandbox audit did not pass DRC!")
         return _execute_stage4_apd_build(src_mcm, out_mcm_path, out_dir, recipe_file, sandbox_summary, timeout_sec)
-
-    s1 = WORKSPACE / "agent04_pdn_architect" / "stage1_inputs"
 
     bga_balls = _read_csv(s1 / "bga_map.csv")
     edtc_pins = _read_csv(s1 / "edtc_pin_map.csv")
@@ -1991,8 +2024,7 @@ def synthesize_full_package_all_dies(
     sandbox_summary["visual_gate_svgs"] = svg_paths
     (out_dir / "AllDies_AllRails_Sandbox_Audit.json").write_text(json.dumps(sandbox_summary, indent=2), encoding="utf-8")
 
-    src_mcm = (WORKSPACE / "agent04_pdn_architect" / "MCM_test" / "PDN_test.mcm").resolve()
-    planned_out = (out_mcm_path or (WORKSPACE / "agent04_pdn_architect" / "MCM_test" / "PDN_test_AllDies_AllRails_27Layer.mcm")).resolve()
+    planned_out = (out_mcm_path or ((_eff_wd / f"{src_mcm.stem}_AllDies_AllRails_27Layer.mcm") if _is_custom and _eff_wd else (WORKSPACE / "agent04_pdn_architect" / "MCM_test" / "PDN_test_AllDies_AllRails_27Layer.mcm"))).resolve()
     gate_payload = {
         "status": "READY_FOR_FINAL_HUMAN_CONFIRMATION" if all_ok else "DRC_FAILED_HOLD",
         "source_mcm_readonly": str(src_mcm),
@@ -2018,22 +2050,43 @@ def synthesize_full_package_all_dies(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build All-Dies, All-Rails 27-Layer PDN from PDN_test.mcm")
+    parser = argparse.ArgumentParser(description="Build All-Dies, All-Rails 27-Layer PDN from Working-Folder MCM_template or PDN_test.mcm")
+    parser.add_argument("--work-dir", default=None, help="Working folder path (defaults to SUBSTRATE_WORK_DIR)")
+    parser.add_argument("--src-mcm", default=None, help="Read-only source .mcm template (defaults to <work-dir>/MCM_template/*.mcm)")
     parser.add_argument("--pins-csv", type=str, default=str(DEFAULT_PINS_CSV))
-    parser.add_argument("--out-dir", type=str, default="agent04_pdn_architect/reports/all_dies_all_rails")
-    parser.add_argument("--out-mcm", type=str, default="agent04_pdn_architect/MCM_test/PDN_test_AllDies_AllRails_27Layer.mcm")
+    parser.add_argument("--out-dir", type=str, default=None)
+    parser.add_argument("--out-mcm", type=str, default=None)
     parser.add_argument("--sandbox-only", action="store_true")
     parser.add_argument("--reuse-sandbox", action="store_true")
     parser.add_argument("--timeout", type=int, default=3600)
     args = parser.parse_args()
 
+    eff_wd, is_custom_wd, eff_src_mcm, _s1 = _resolve_pdn_io_context(
+        src_mcm_path=Path(args.src_mcm) if args.src_mcm else None,
+        work_dir=args.work_dir,
+    )
+    base_dir = eff_wd if (is_custom_wd and eff_wd) else WORKSPACE
+    if args.out_dir:
+        out_dir_p = Path(args.out_dir)
+        out_dir = out_dir_p if out_dir_p.is_absolute() else (base_dir / out_dir_p)
+    else:
+        out_dir = (eff_wd / "reports" / "all_dies_all_rails") if (is_custom_wd and eff_wd) else (WORKSPACE / "agent04_pdn_architect" / "reports" / "all_dies_all_rails")
+
+    if args.out_mcm:
+        out_mcm_p = Path(args.out_mcm)
+        out_mcm = out_mcm_p if out_mcm_p.is_absolute() else (base_dir / out_mcm_p)
+    else:
+        out_mcm = (eff_wd / f"{eff_src_mcm.stem}_AllDies_AllRails_27Layer.mcm") if (is_custom_wd and eff_wd) else (WORKSPACE / "agent04_pdn_architect" / "MCM_test" / "PDN_test_AllDies_AllRails_27Layer.mcm")
+
     res = synthesize_full_package_all_dies(
         pins_csv=Path(args.pins_csv),
-        out_dir=WORKSPACE / args.out_dir,
+        out_dir=out_dir,
         dry_run_only=args.sandbox_only,
-        out_mcm_path=WORKSPACE / args.out_mcm,
+        out_mcm_path=out_mcm,
         timeout_sec=args.timeout,
         reuse_sandbox=args.reuse_sandbox,
+        src_mcm_path=eff_src_mcm,
+        work_dir=args.work_dir,
     )
     print(json.dumps({
         "status": res["status"],

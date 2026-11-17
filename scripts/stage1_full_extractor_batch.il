@@ -72,12 +72,16 @@ procedure( pdn_run_stage1_full_extractor()
         bump_cnt = 0
         pad_cnt = 0
 
-        ; 1. Extract Conductor Stackup Layers
+        ; 1. Extract Conductor & Dielectric Stackup Layers
         xs_idx = 0
         foreach(s axlSubclasses("CONDUCTOR")
             xs_idx = xs_idx + 1
             lyr_cnt = lyr_cnt + 1
-            fprintf(p_stk "%d,%s,CONDUCTOR\n" xs_idx s)
+            let((lyr_obj lyr_type)
+                lyr_obj = axlLayerGet(strcat("CONDUCTOR/" s))
+                lyr_type = if( lyr_obj != nil && lyr_obj->type != nil then lyr_obj->type else "CONDUCTOR")
+                fprintf(p_stk "%d,%s,%s\n" xs_idx s lyr_type)
+            )
         )
 
         ; 2. Extract Symbols, RefDes, BGA Map, eDTC Map, LSC Map, and Bump Map

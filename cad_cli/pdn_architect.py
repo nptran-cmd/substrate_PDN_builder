@@ -101,7 +101,13 @@ def run_full_4stage_pdn_flow(
     output_dir: str = "agent04_pdn_architect",
 ) -> Dict[str, Any]:
     """Run all 4 stages of Agent 04 (Pre-Learn -> 5-Zone Synthesis -> SVG Sandbox -> .mcm Recipe Import)."""
-    out_base = Path(output_dir)
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_active_work_dir
+    except ImportError:
+        from pdn_paths import resolve_active_work_dir  # type: ignore
+
+    eff_wd, is_custom_wd = resolve_active_work_dir()
+    out_base = eff_wd if (output_dir == "agent04_pdn_architect" and is_custom_wd) else Path(output_dir)
     reports_dir = out_base / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     if design_rule_files is None:

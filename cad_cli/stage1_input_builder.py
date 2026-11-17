@@ -3,7 +3,7 @@ Stage 1 End-to-End Input Preparation & Extraction Pipeline for Agent 04 (`pdn_ar
 
 Prepares all Stage 1 input datasets from the 4 user-specified Google Drive / HFC_TO_docs sources:
   1. MCM Layout Source (18HYdFquj1YGEy8tEPamSwFe-cIcmwegV):
-     `<cadence_library_dir>
+     `<cadence_library_dir>`
      -> Extracts:
         - `bga_map.csv`                   (14,521 BGA balls on A1 / BASE)
         - `bump_map.csv`                  (SURFACE Die/HBM/EMIB Bridge bump pins by RefDes)
@@ -14,16 +14,16 @@ Prepares all Stage 1 input datasets from the 4 user-specified Google Drive / HFC
         - `stackup_53layers.csv`          (All 53 Conductor/Dielectric/Plane layers classified into 6 PDN zones)
         - `refdes_inventory.csv`          (All 2,348 placed symbols & RefDes)
   2. Padstack Library Source (1lAOTp7WoyjEXx5BGcLOQMt7unXKBW_rm):
-     `<cadence_library_dir>
+     `<cadence_library_dir>`
      -> Extracts:
         - `padstack_library_index.csv`    (All .pad files + 105 .mcm padstacks mapped to exact layer spans & sizes)
   3. LSC & Component Symbols Source (1qunS4LfGvYBjFmf22MjZAPaLxrvCgZHs):
-     `<cadence_library_dir> & `<cadence_library_dir>
+     `<cadence_library_dir>` & `<cadence_library_dir>`
      -> Extracts:
         - `lsc_symbol_library.csv`        (SM0201 / SM0201S / SM0204 LSC packages, device files, padstacks)
         - `lsc_placed_map.csv`            (467 BASE LSCs + 1,741 SURFACE DSCs)
   4. Design Rule Source (1fT3G6jmAennsQqZpESV_Jq0kirRUUwLa):
-     `<cadence_library_dir> (`J97403 Substrate Design Rule IFS_Hutton_Hill_21_2.pdf` + 25 Rule SVGs + CSVs)
+     `<cadence_library_dir>` (`J97403 Substrate Design Rule IFS_Hutton_Hill_21_2.pdf` + 25 Rule SVGs + CSVs)
      -> Extracts:
         - `design_rules_table.csv`
         - `design_rules_indexed.json`
@@ -32,10 +32,15 @@ Prepares all Stage 1 input datasets from the 4 user-specified Google Drive / HFC
 
 from __future__ import annotations
 
+import argparse
 import csv
+import html
 import io
 import json
+import os
 import re
+import shutil
+import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter
 from pathlib import Path
@@ -47,24 +52,26 @@ from .pdn_prelearn import (
     classify_layer_into_zone,
     parse_design_rules_from_rows,
     read_tabular_lines_from_any_format,
+    resolve_mcm_in_work_dir,
+    run_stage1_prelearn,
 )
 
 
 DRIVE_FOLDER_SOURCES: Dict[str, Dict[str, str]] = {
     "mcm_source": {
-        "drive_url": "<drive_source_url>",
+        "drive_url": "<drive_folder_url>",
         "local_path": r"<cadence_library_dir>",
     },
     "padstack_library": {
-        "drive_url": "<drive_source_url>",
+        "drive_url": "<drive_folder_url>",
         "local_path": r"<cadence_library_dir>",
     },
     "lsc_and_symbols": {
-        "drive_url": "<drive_source_url>",
+        "drive_url": "<drive_folder_url>",
         "local_path": r"<cadence_library_dir>",
     },
     "design_rules": {
-        "drive_url": "<drive_source_url>",
+        "drive_url": "<drive_folder_url>",
         "local_path": r"<cadence_library_dir>",
     },
 }
@@ -146,10 +153,26 @@ def _parse_padstack_geometry_from_extract(mcm_padstacks_txt: Path) -> Dict[str, 
     return geom
 
 
+def _classify_dielectric_zone(canonical: str) -> str:
+    """Classify a dielectric or prepreg layer name into its structural zone."""
+    u = canonical.upper()
+    if any(k in u for k in ("C0", "12", "11", "10", "9", "8", "7", "6", "5F", "4-5F")):
+        return "DIELECTRIC_ABOVE_BU" if "B" not in u else "DIELECTRIC_BELOW_BU"
+    if any(k in u for k in ("3-4F", "2-3F")):
+        return "PREPREG_ABOVE_CORE"
+    if any(k in u for k in ("1-2F", "PTH", "1-2B")):
+        return "DIELECTRIC_CORE"
+    if any(k in u for k in ("2-3B", "3-4B")):
+        return "PREPREG_BELOW_CORE"
+    return "DIELECTRIC_BELOW_BU"
+
+
 def build_stage1_stackup_csv(
     mcm_layers_txt: Path,
     out_csv: Path,
     out_zones_json: Path,
+    stackup_from_mcm_csv: Optional[Path] = None,
+    prefer_extracted_csv: bool = False,
 ) -> Dict[str, Any]:
     """Build stackup_53layers.csv and stackup_zones.json with 6-Zone PDN classification."""
     rows_out: List[Dict[str, Any]] = []
@@ -162,7 +185,54 @@ def build_stage1_stackup_csv(
         "BASE": [],
     }
 
-    if mcm_layers_txt.exists():
+    use_extracted = bool(
+        stackup_from_mcm_csv
+        and stackup_from_mcm_csv.exists()
+        and (prefer_extracted_csv or not mcm_layers_txt.exists())
+    )
+    if use_extracted and stackup_from_mcm_csv:
+        with stackup_from_mcm_csv.open("r", encoding="utf-8", errors="ignore") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                idx = int(row.get("layer_index") or (len(rows_out) + 1))
+                subclass = (row.get("subclass_name") or "").strip()
+                if not subclass:
+                    continue
+                canonical = "SURFACE" if subclass.upper() == "TOP" else ("BASE" if subclass.upper() == "BOTTOM" else subclass)
+                raw_type = (row.get("layer_type") or "CONDUCTOR").strip().upper()
+                is_dielectric = (
+                    raw_type == "DIELECTRIC"
+                    or "-" in canonical
+                    or canonical.upper() == "PTH"
+                )
+                if is_dielectric:
+                    is_cond = "NO"
+                    l_type = "DIELECTRIC"
+                    pdn_zone = _classify_dielectric_zone(canonical)
+                else:
+                    is_cond = "YES"
+                    l_type = raw_type or "CONDUCTOR"
+                    pdn_zone = classify_layer_into_zone(canonical)
+                    if canonical not in zones[pdn_zone]:
+                        zones[pdn_zone].append(canonical)
+                rows_out.append(
+                    {
+                        "layer_index": idx,
+                        "subclass_name": canonical,
+                        "mcm_subclass": subclass,
+                        "layer_type": l_type,
+                        "layer_use": l_type,
+                        "is_conductor": is_cond,
+                        "material": "",
+                        "thickness_um": 0.0,
+                        "thickness_mil": 0.0,
+                        "dk": "",
+                        "df": "",
+                        "conductivity": "",
+                        "pdn_zone": pdn_zone,
+                    }
+                )
+    elif mcm_layers_txt.exists():
         idx = 0
         with mcm_layers_txt.open("r", encoding="utf-8", errors="ignore") as f:
             for line in f:
@@ -194,16 +264,7 @@ def build_stage1_stackup_csv(
                     if canonical not in zones[pdn_zone]:
                         zones[pdn_zone].append(canonical)
                 else:
-                    if any(k in canonical.upper() for k in ("C0", "12", "11", "10", "9", "8", "7", "6", "5F", "4-5F")):
-                        pdn_zone = "DIELECTRIC_ABOVE_BU" if "B" not in canonical.upper() else "DIELECTRIC_BELOW_BU"
-                    elif any(k in canonical.upper() for k in ("3-4F", "2-3F")):
-                        pdn_zone = "PREPREG_ABOVE_CORE"
-                    elif any(k in canonical.upper() for k in ("1-2F", "PTH", "1-2B")):
-                        pdn_zone = "DIELECTRIC_CORE"
-                    elif any(k in canonical.upper() for k in ("2-3B", "3-4B")):
-                        pdn_zone = "PREPREG_BELOW_CORE"
-                    else:
-                        pdn_zone = "DIELECTRIC_BELOW_BU"
+                    pdn_zone = _classify_dielectric_zone(canonical)
 
                 rows_out.append(
                     {
@@ -262,10 +323,41 @@ def build_stage1_padstack_index(
     mcm_learned_txt: Path,
     mcm_padstacks_txt: Path,
     out_csv: Path,
+    padstacks_from_mcm_csv: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Combine all .pad files from <cadence_library_dir> with .mcm padstack definitions."""
+    """Combine .pad files from library_dir with .mcm extracted padstacks."""
     geom_map = _parse_padstack_geometry_from_extract(mcm_padstacks_txt)
     pad_records: Dict[str, Dict[str, Any]] = {}
+
+    if padstacks_from_mcm_csv and padstacks_from_mcm_csv.exists():
+        with padstacks_from_mcm_csv.open("r", encoding="utf-8", errors="ignore") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                ps_name = (row.get("padstack_name") or "").strip().upper()
+                if not ps_name:
+                    continue
+                is_thru = (row.get("is_through") or "").strip().upper() == "TRUE"
+                start_l = (row.get("start_layer") or "").strip().strip('"').replace("CONDUCTOR/", "")
+                end_l = (row.get("end_layer") or "").strip().strip('"').replace("CONDUCTOR/", "")
+                try:
+                    drill_um = float(row.get("drill_um") or 0.0)
+                except ValueError:
+                    drill_um = 0.0
+                g = geom_map.get(ps_name, {})
+                pw_dict = g.get("pad_widths", {})
+                pad_um = max(pw_dict.values()) if pw_dict else 0.0
+                zone_cat = _classify_padstack_zone(ps_name, start_l, end_l, is_thru)
+                pad_records[ps_name] = {
+                    "padstack_name": ps_name,
+                    "in_mcm_db": "YES",
+                    "in_library_folder": "NO",
+                    "pad_file_path": "",
+                    "start_layer": start_l,
+                    "end_layer": end_l,
+                    "drill_um": drill_um or g.get("drill_um", 0.0),
+                    "regular_pad_um": pad_um,
+                    "pdn_zone_category": zone_cat,
+                }
 
     if mcm_learned_txt.exists():
         with mcm_learned_txt.open("r", encoding="utf-8", errors="ignore") as f:
@@ -1028,23 +1120,137 @@ def build_stage1_design_rules(
     return rules
 
 
+def export_stage1_summary_svg(manifest: Dict[str, Any], out_svg: Path) -> Path:
+    """Render XML-validated Stage 1 extraction & workspace export summary SVG."""
+    w, h = 1280, 740
+    work_dir = html.escape(str(manifest.get("working_dir", "")))
+    out_dir = html.escape(str(manifest.get("export_dir", "")))
+    src_mcm = html.escape(str(manifest.get("source_mcm", "")))
+    metrics = manifest.get("mcm_extraction_metrics") or {}
+    stk = manifest.get("stackup_summary") or {}
+    zones = stk.get("conductor_zones") or {}
+    files_map = manifest.get("prepared_stage1_files") or {}
+
+    lines: List[str] = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}" style="background:#0b1120">',
+        f'<rect width="{w}" height="{h}" fill="#0b1120"/>',
+        '<text x="32" y="42" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold">Agent 04 Stage 1 — Workspace Data Export Summary</text>',
+        f'<text x="32" y="68" fill="#d89b56" font-family="Consolas, monospace" font-size="13">Working Folder: {work_dir}</text>',
+        f'<text x="32" y="88" fill="#38bdf8" font-family="Consolas, monospace" font-size="12.5">Source .mcm: {src_mcm}</text>',
+        f'<text x="32" y="108" fill="#94a3b8" font-family="Consolas, monospace" font-size="12">Export Dir: {out_dir}</text>',
+    ]
+
+    # Top summary stat cards
+    bga_val = str(
+        metrics.get("BGA_PINS_EXTRACTED", metrics.get("BGA_PINS", metrics.get("bga_pins", "csv/cached")))
+    )
+    edtc_val = str(
+        metrics.get("EDTC_SYMBOLS_EXTRACTED", metrics.get("EDTC_SYMBOLS", metrics.get("edtc_symbols", "csv/cached")))
+    )
+    if "LSC_BASE_CAPS_EXTRACTED" in metrics or "DSC_SURFACE_CAPS_EXTRACTED" in metrics:
+        lsc_c = metrics.get("LSC_BASE_CAPS_EXTRACTED", "0")
+        dsc_c = metrics.get("DSC_SURFACE_CAPS_EXTRACTED", "0")
+        lsc_val = f"{lsc_c} / {dsc_c}"
+    else:
+        lsc_val = str(metrics.get("LSC_COUNT", metrics.get("lsc_count", "csv/cached")))
+    cards = [
+        ("Stackup Layers", str(stk.get("total_stackup_layers", 0)), "#38bdf8"),
+        ("Padstacks Indexed", str((manifest.get("padstack_library_summary") or {}).get("total_indexed_padstacks", 0)), "#34d399"),
+        ("BGA Pins", bga_val, "#d89b56"),
+        ("eDTC Symbols", edtc_val, "#fb7185"),
+        ("LSCs / DSCs", lsc_val, "#a7f3d0"),
+    ]
+    cw = 232
+    for i, (lbl, val, col) in enumerate(cards):
+        cx = 32 + i * (cw + 12)
+        lines.append(f'<rect x="{cx}" y="128" width="{cw}" height="74" rx="6" fill="#12161d" stroke="#334155"/>')
+        lines.append(f'<text x="{cx+14}" y="152" fill="#94a3b8" font-family="Segoe UI, Arial" font-size="12">{html.escape(lbl)}</text>')
+        lines.append(f'<text x="{cx+14}" y="186" fill="{col}" font-family="Consolas, monospace" font-size="22" font-weight="bold">{html.escape(val)}</text>')
+
+    # Left panel: 6 PDN Conductor Zones
+    lines.append('<rect x="32" y="220" width="540" height="488" rx="6" fill="#12161d" stroke="#334155"/>')
+    lines.append('<text x="48" y="248" fill="#f8fafc" font-family="Segoe UI, Arial" font-size="15" font-weight="bold">6-Zone Conductor Stackup Classification</text>')
+    zone_colors = {
+        "ABOVE_BU": "#38bdf8",
+        "ABOVE_PP": "#fbbf24",
+        "CORE": "#ef4444",
+        "BELOW_PP": "#fb923c",
+        "BELOW_BU": "#34d399",
+        "BASE": "#d89b56",
+    }
+    zy = 272
+    for zname in ("ABOVE_BU", "ABOVE_PP", "CORE", "BELOW_PP", "BELOW_BU", "BASE"):
+        layers = zones.get(zname, [])
+        zcol = zone_colors.get(zname, "#cbd5e1")
+        lyr_txt = ", ".join(layers[:10]) + (" ..." if len(layers) > 10 else "")
+        lines.append(f'<rect x="48" y="{zy}" width="508" height="62" rx="4" fill="#090d16" stroke="{zcol}" stroke-opacity="0.45"/>')
+        lines.append(f'<text x="60" y="{zy+22}" fill="{zcol}" font-family="Consolas, monospace" font-size="13" font-weight="bold">{html.escape(zname)} ({len(layers)} layers)</text>')
+        lines.append(f'<text x="60" y="{zy+44}" fill="#cbd5e1" font-family="Consolas, monospace" font-size="11.5">{html.escape(lyr_txt or "none")}</text>')
+        zy += 70
+
+    # Right panel: Exported Stage 1 Files Table
+    lines.append('<rect x="590" y="220" width="658" height="488" rx="6" fill="#12161d" stroke="#334155"/>')
+    lines.append('<text x="608" y="248" fill="#f8fafc" font-family="Segoe UI, Arial" font-size="15" font-weight="bold">Exported Stage 1 Datasets in Working Folder</text>')
+    fy = 268
+    listed_items = [(k, p_str) for k, p_str in files_map.items() if k != "stage1_data_summary_svg"]
+    for idx_f, (k, p_str) in enumerate(listed_items[:17]):
+        fp = Path(p_str)
+        exists = fp.is_file()
+        sz_kb = f"{fp.stat().st_size / 1024.0:.1f} KB" if exists else "not extracted"
+        status_col = "#34d399" if exists else "#64748b"
+        lines.append(f'<rect x="606" y="{fy}" width="626" height="22" rx="3" fill="{"#0f172a" if idx_f % 2 == 0 else "#090d16"}"/>')
+        lines.append(f'<text x="616" y="{fy+15}" fill="#e2e8f0" font-family="Consolas, monospace" font-size="11">{html.escape(fp.name)}</text>')
+        lines.append(f'<text x="1220" y="{fy+15}" text-anchor="end" fill="{status_col}" font-family="Consolas, monospace" font-size="11">{html.escape(sz_kb)}</text>')
+        fy += 25
+
+    lines.append("</svg>")
+    svg_txt = "\n".join(lines)
+    ET.fromstring(svg_txt)
+    out_svg.parent.mkdir(parents=True, exist_ok=True)
+    out_svg.write_text(svg_txt, encoding="utf-8")
+    return out_svg
+
+
 def run_stage1_full_input_preparation(
-    mcm_path: str = DRIVE_FOLDER_SOURCES["mcm_source"]["local_path"],
+    mcm_path: Optional[str] = None,
     padstack_lib_dir: str = DRIVE_FOLDER_SOURCES["padstack_library"]["local_path"],
     symbols_dir: str = DRIVE_FOLDER_SOURCES["lsc_and_symbols"]["local_path"],
     designrule_dir: str = DRIVE_FOLDER_SOURCES["design_rules"]["local_path"],
-    out_dir: str = "agent04_pdn_architect/stage1_inputs",
+    out_dir: Optional[str] = None,
     run_headless_apd_extract: bool = True,
+    work_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Execute complete Stage 1 input file extraction & indexing from the 4 user-specified sources."""
+    """Execute Stage 1 data extraction & indexing into the active working folder."""
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_active_work_dir
+    except ImportError:
+        from pdn_paths import resolve_active_work_dir  # type: ignore
+
     workspace = Path(__file__).resolve().parent.parent.parent
     agent_dir = Path(__file__).resolve().parent.parent
-    out_p = workspace / out_dir if not Path(out_dir).is_absolute() else Path(out_dir)
+
+    eff_wd, is_custom_wd = resolve_active_work_dir(work_dir)
+
+    if out_dir:
+        cand_out = Path(out_dir).expanduser()
+        out_p = cand_out if cand_out.is_absolute() else ((eff_wd / cand_out) if is_custom_wd else (workspace / cand_out))
+    elif is_custom_wd:
+        out_p = eff_wd / "stage1_inputs"
+    else:
+        out_p = workspace / "agent04_pdn_architect" / "stage1_inputs"
+    out_p = out_p.resolve()
     out_p.mkdir(parents=True, exist_ok=True)
 
-    # Use local NVMe cache of the .mcm if present to avoid streaming 2.98 GB over G:\My Drive
-    local_mcm_cache = workspace / "mcm_designs" / "HH_full_Main_Drawing_Nguyen_2026-0916_2000_CORE_TO_R3.mcm"
-    effective_mcm = local_mcm_cache if local_mcm_cache.exists() else Path(mcm_path)
+    # Select explicit --mcm, else .mcm template from active working folder, else repo default
+    if mcm_path:
+        effective_mcm = Path(mcm_path).expanduser().resolve()
+    else:
+        wd_mcm = resolve_mcm_in_work_dir(eff_wd) if is_custom_wd else None
+        if wd_mcm and wd_mcm.exists():
+            effective_mcm = wd_mcm
+        else:
+            local_mcm_cache = workspace / "mcm_designs" / "HH_full_Main_Drawing_Nguyen_2026-0916_2000_CORE_TO_R3.mcm"
+            effective_mcm = local_mcm_cache if local_mcm_cache.exists() else Path(DRIVE_FOLDER_SOURCES["mcm_source"]["local_path"])
 
     script_dir = agent_dir / "scripts"
     extractor_report: Dict[str, str] = {}
@@ -1056,17 +1262,38 @@ def run_stage1_full_input_preparation(
             script_dir / "pdn_Pipeline_batch.il",
         ]
         runner = CadenceBatchRunner()
+        out_p_skill = runner.to_skill_path(out_p)
         scr_path = runner.create_scr_file(
             skill_loads=skill_loads,
-            skill_calls=['pdnDispatchBatchJob("STAGE1_FULL_EXTRACT" "FALSE")'],
+            skill_calls=[
+                f'axlSetVariable("PDN_CWD" "{out_p_skill}")',
+                'pdnDispatchBatchJob("STAGE1_FULL_EXTRACT" "FALSE")',
+            ],
             output_scr_path=out_p / "run_stage1_extract.scr",
         )
-        runner.run(
-            mcm_path=effective_mcm.resolve(),
-            scr_path=scr_path,
-            working_dir=out_p,
-            bypass_lock_readonly=True,
-        )
+        mcm_dir = effective_mcm.resolve().parent
+        src_jrl = mcm_dir / "apd.jrl"
+        pre_jrl_mtime = src_jrl.stat().st_mtime if src_jrl.exists() else None
+        prev_pdn_cwd = os.environ.get("PDN_CWD")
+        os.environ["PDN_CWD"] = out_p_skill
+        try:
+            runner.run(
+                mcm_path=effective_mcm.resolve(),
+                scr_path=scr_path,
+                working_dir=out_p,
+                bypass_lock_readonly=True,
+            )
+        finally:
+            if prev_pdn_cwd is None:
+                os.environ.pop("PDN_CWD", None)
+            else:
+                os.environ["PDN_CWD"] = prev_pdn_cwd
+        if mcm_dir != out_p and src_jrl.exists():
+            if pre_jrl_mtime is None or src_jrl.stat().st_mtime > pre_jrl_mtime:
+                try:
+                    shutil.move(str(src_jrl), str(out_p / "apd.jrl"))
+                except OSError:
+                    pass
         rep_file = out_p / "stage1_extraction_report.txt"
         if rep_file.exists():
             for line in rep_file.read_text(encoding="utf-8", errors="ignore").splitlines():
@@ -1074,19 +1301,29 @@ def run_stage1_full_input_preparation(
                     k, v = line.split("=", 1)
                     extractor_report[k.strip()] = v.strip()
 
-    # 2. Build 53-Layer Stackup CSV & 6-Zone Classification JSON
+    # 2. Build Stackup CSV & 6-Zone Classification JSON (prefer extracted CSV when custom .mcm)
     stackup_summary = build_stage1_stackup_csv(
         mcm_layers_txt=workspace / "cadence_extract" / "mcm_layers.txt",
         out_csv=out_p / "stackup_53layers.csv",
         out_zones_json=out_p / "stackup_zones.json",
+        stackup_from_mcm_csv=out_p / "stackup_from_mcm.csv",
+        prefer_extracted_csv=is_custom_wd or bool(mcm_path),
     )
 
-    # 3. Build Padstack Library Index CSV (combining <cadence_library_dir> + .mcm padstacks)
+    # 3. Build Padstack Library Index CSV (combining .pad library + extracted .mcm padstacks)
+    extracted_padstacks_csv = out_p / "padstacks_from_mcm.csv"
+    if (out_p / "pdn_mcm_learned.txt").exists():
+        mcm_learned_path = out_p / "pdn_mcm_learned.txt"
+    elif not extracted_padstacks_csv.exists() and not is_custom_wd:
+        mcm_learned_path = agent_dir / "reports" / "pdn_mcm_learned.txt"
+    else:
+        mcm_learned_path = out_p / "pdn_mcm_learned.txt"
     padstack_summary = build_stage1_padstack_index(
         library_dir=Path(padstack_lib_dir),
-        mcm_learned_txt=agent_dir / "reports" / "pdn_mcm_learned.txt",
+        mcm_learned_txt=mcm_learned_path,
         mcm_padstacks_txt=workspace / "cadence_extract" / "mcm_padstacks.txt",
         out_csv=out_p / "padstack_library_index.csv",
+        padstacks_from_mcm_csv=extracted_padstacks_csv,
     )
 
     # 4. Build Full Die/HBM/EMIB Bridge Bump Package Summary from Symbols/*.zip
@@ -1113,9 +1350,21 @@ def run_stage1_full_input_preparation(
         out_per_layer_csv=out_p / "per_layer_design_rules.csv",
     )
 
+    # 7. Export knowledge index inside working folder too
+    run_stage1_prelearn(
+        padstack_library_folder=padstack_lib_dir if Path(padstack_lib_dir).exists() else None,
+        mcm_path=str(effective_mcm) if effective_mcm.exists() else None,
+        run_headless_mcm_learner=False,
+        output_index_path=str(out_p / "pdn_knowledge_index.json"),
+        work_dir=str(eff_wd),
+    )
+
     manifest = {
         "status": "SUCCESS",
         "stage": "STAGE1_PRELEARN_COMPLETE",
+        "working_dir": str(eff_wd),
+        "export_dir": str(out_p),
+        "source_mcm": str(effective_mcm),
         "drive_sources": DRIVE_FOLDER_SOURCES,
         "mcm_extraction_metrics": extractor_report,
         "stackup_summary": stackup_summary,
@@ -1150,12 +1399,43 @@ def run_stage1_full_input_preparation(
             "design_rules_table_csv": str(out_p / "design_rules_table.csv"),
             "per_layer_design_rules_csv": str(out_p / "per_layer_design_rules.csv"),
             "design_rules_indexed_json": str(out_p / "design_rules_indexed.json"),
+            "pdn_knowledge_index_json": str(out_p / "pdn_knowledge_index.json"),
+            "stage1_master_manifest_json": str(out_p / "stage1_master_manifest.json"),
+            "stage1_data_summary_svg": str(out_p / "stage1_data_summary.svg"),
         },
     }
     (out_p / "stage1_master_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    export_stage1_summary_svg(manifest, out_p / "stage1_data_summary.svg")
     return manifest
 
 
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Agent 04 Stage 1 Data Extractor & Input Exporter")
+    parser.add_argument("--work-dir", default=None, help="Working folder path (defaults to SUBSTRATE_WORK_DIR)")
+    parser.add_argument("--mcm", default=None, help="Path to target .mcm template (auto-detected from work-dir if omitted)")
+    parser.add_argument("--out-dir", default=None, help="Output folder for Stage 1 files (defaults to <work-dir>/stage1_inputs)")
+    parser.add_argument("--padstack-dir", default=DRIVE_FOLDER_SOURCES["padstack_library"]["local_path"])
+    parser.add_argument("--symbols-dir", default=DRIVE_FOLDER_SOURCES["lsc_and_symbols"]["local_path"])
+    parser.add_argument("--skip-apd", action="store_true", help="Skip headless apd.exe .mcm extraction (offline indexing only)")
+    args = parser.parse_args()
+
+    res = run_stage1_full_input_preparation(
+        mcm_path=args.mcm,
+        padstack_lib_dir=args.padstack_dir,
+        symbols_dir=args.symbols_dir,
+        out_dir=args.out_dir,
+        run_headless_apd_extract=not args.skip_apd,
+        work_dir=args.work_dir,
+    )
+    print(json.dumps({
+        "status": res["status"],
+        "working_dir": res["working_dir"],
+        "export_dir": res["export_dir"],
+        "source_mcm": res["source_mcm"],
+        "mcm_extraction_metrics": res["mcm_extraction_metrics"],
+        "stage1_data_summary_svg": res["prepared_stage1_files"]["stage1_data_summary_svg"],
+    }, indent=2))
+
+
 if __name__ == "__main__":
-    res = run_stage1_full_input_preparation(run_headless_apd_extract=True)
-    print(json.dumps(res["mcm_extraction_metrics"], indent=2))
+    main()

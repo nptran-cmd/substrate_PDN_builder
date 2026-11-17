@@ -906,6 +906,10 @@ PADSTACK_CONDUCTOR_RADII: Dict[str, List[Tuple[str, float]]] = {
     "V90_65_90_7F_6F_01A":            [("7F", 45.0), ("6F", 45.0)],
     "V90_65_90_6F_5F_01A":            [("6F", 45.0), ("5F", 45.0)],
     "V90_65_121_5F_4FCO_01A":         [("5F", 45.0), ("4FCO", 60.5)],
+    "V175_85_175_4FCO_3FCI_01A":      [("4FCO", 87.5), ("3FCI", 87.5)],
+    "V175_85_175_3FCI_2FCI_01A":      [("3FCI", 87.5), ("2FCI", 87.5)],
+    "V175_85_175_2BCI_3BCI_01A":      [("2BCI", 87.5), ("3BCI", 87.5)],
+    "V175_85_175_3BCI_4BCO_01A":      [("3BCI", 87.5), ("4BCO", 87.5)],
     "V282_5_85_175_4FCO_3FCI_01A":    [("4FCO", 141.25), ("3FCI", 87.5)],
     "V175_85_282_5_3FCI_2FCI_01A":    [("3FCI", 87.5), ("2FCI", 141.25)],
     "V282_5_150_282_5_2FCI_2BCI_01B": [("2FCI", 141.25), ("1FCI", 182.5), ("1BCI", 182.5), ("2BCI", 141.25)],
@@ -963,12 +967,20 @@ def can_place_via_stack_zero_overlap(
     x: float,
     y: float,
     padstack_overrides: Optional[Dict[Tuple[str, str], str]] = None,
+    min_same_net_gap_override: Optional[float] = None,
+    allow_concentric_same_net_layers: Optional[Sequence[str]] = None,
 ) -> bool:
     """
     Check EVERY conductor layer touched by `spans` (`SURFACE`..`BASE`) so that NO via pad in `spans`
     can overlap (or violate min edge-to-edge spacing against) ANY previously placed via pad on ANY
     shared conductor layer (preventing both same-span overlap AND staggered/adjacent-span overlap!).
+    When `min_same_net_gap_override` is set (e.g. `0.0` or `1.0 um` for BGA Center 4-via cluster),
+    same-net BU pads allow down to that positive/tangent gap while still enforcing 0 overlap and full diff-net rules.
+    When `allow_concentric_same_net_layers` includes a shared junction layer (e.g. `{"12B"}`),
+    exact concentric continuation (`dist < 0.05 um`, same net) is allowed on that junction layer
+    while all non-concentric neighbors still enforce full clearance.
     """
+    conc_allowed = set(allow_concentric_same_net_layers or ())
     max_r_by_cond: Dict[str, float] = {}
     for sl, el in spans:
         ps = (padstack_overrides or {}).get((sl, el)) or SPAN_PADSTACKS_STANDARD[(sl, el)]
@@ -982,9 +994,16 @@ def can_place_via_stack_zero_overlap(
         for gx in (cx - 1, cx, cx + 1):
             for gy in (cy - 1, cy, cy + 1):
                 for ox, oy, r2, onet in grid.grid.get((key, gx, gy), ()):
-                    gap = conductor_min_edge_gap_um(c_lyr, r1, r2, onet == net_name)
+                    same_net = (onet == net_name)
+                    dsq = (x - ox) ** 2 + (y - oy) ** 2
+                    if same_net and c_lyr in conc_allowed and dsq < 0.0025:
+                        continue
+                    if same_net and min_same_net_gap_override is not None and c_lyr not in CORE_CONDUCTOR_SET:
+                        gap = max(0.0, min_same_net_gap_override)
+                    else:
+                        gap = conductor_min_edge_gap_um(c_lyr, r1, r2, same_net)
                     req = r1 + r2 + gap
-                    if (x - ox) ** 2 + (y - oy) ** 2 < req * req:
+                    if dsq < req * req - 1e-6:
                         return False
     return True
 
@@ -998,6 +1017,8 @@ def insert_via_stack_zero_overlap(
     y: float,
     tag: str,
     padstack_overrides: Optional[Dict[Tuple[str, str], str]] = None,
+    min_same_net_gap_override: Optional[float] = None,
+    allow_concentric_same_net_layers: Optional[Sequence[str]] = None,
 ) -> int:
     """
     Atomically verify `0` pad overlap on EVERY touched conductor layer and insert all `spans` at `(x, y)`.
@@ -1005,7 +1026,16 @@ def insert_via_stack_zero_overlap(
     """
     if not spans:
         return 0
-    if not can_place_via_stack_zero_overlap(grid, net_name, spans, x, y, padstack_overrides):
+    if not can_place_via_stack_zero_overlap(
+        grid,
+        net_name,
+        spans,
+        x,
+        y,
+        padstack_overrides,
+        min_same_net_gap_override=min_same_net_gap_override,
+        allow_concentric_same_net_layers=allow_concentric_same_net_layers,
+    ):
         return 0
 
     max_r_by_cond: Dict[str, float] = {}

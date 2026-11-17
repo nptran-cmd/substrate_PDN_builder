@@ -194,7 +194,7 @@ procedure( pdnMrPlaceBaseLsc( refDes symName cx cy rotDeg p1Net p2Net netTbl )
 
 procedure( pdnMrEnsureLibPaths()
   let( (libDir psmList padList devList)
-    libDir = "G:/My Drive/HFC_TO_docs/Library"
+    libDir = "<cadence_library_dir>"
     when( isDir(libDir)
       psmList = axlGetVariableList("psmpath")
       unless( member(libDir psmList) axlSetVariable("psmpath" cons(libDir psmList)) )

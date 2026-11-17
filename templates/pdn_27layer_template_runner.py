@@ -79,6 +79,13 @@ from agent04_pdn_architect.cad_cli.u9_vddc_sram_surface_3to1_jog_router import (
     route_u9_vddc0_sram0_vss_3to1_vertical_jog,
 )
 
+from agent04_pdn_architect.cad_cli.pdn_paths import (
+    REPO_ROOT as _PDN_REPO_ROOT,
+    resolve_output_dir as _resolve_pdn_out_dir,
+    resolve_output_file as _resolve_pdn_out_file,
+    resolve_stage1_inputs_dir as _resolve_s1_dir,
+)
+
 CANONICAL_27_LAYERS: Tuple[str, ...] = (
     "SURFACE", "C0",
     "12F", "11F", "10F", "9F", "8F", "7F", "6F", "5F",
@@ -457,7 +464,8 @@ def _compile_curved_pockets_from_seeds(
 
 def _compile_task1(cfg: Dict[str, Any], ws: Path) -> Dict[str, Any]:
     io_cfg = cfg["design_io"]
-    build_dir = ws / io_cfg["output_build_dir"]
+    exp_wd = None if ws.resolve() == _PDN_REPO_ROOT else ws
+    build_dir = _resolve_pdn_out_dir(io_cfg["output_build_dir"], explicit_work_dir=exp_wd)
     build_dir.mkdir(parents=True, exist_ok=True)
     z_cfg = cfg["zone_routing_parameters"]
     z1 = z_cfg["zone1_surface_escape"]
@@ -476,7 +484,9 @@ def _compile_task1(cfg: Dict[str, Any], ws: Path) -> Dict[str, Any]:
     )
 
     # 2. Synthesize curved BGA-following recesses & 180-deg LSCs for U7 (VDDUC0) + U2 (VDDCH0)
-    bga_balls = _read_csv_rows(ws / io_cfg["bga_map_csv"])
+    s1_dir = _resolve_s1_dir(explicit_work_dir=exp_wd)
+    bga_csv = (s1_dir / Path(io_cfg["bga_map_csv"]).name) if (s1_dir / Path(io_cfg["bga_map_csv"]).name).is_file() else (ws / io_cfg["bga_map_csv"])
+    bga_balls = _read_csv_rows(bga_csv)
     t1_specs = [
         ("U7_VDDUC0_CoreSouth", [(21980.0, 9500.0), (21980.0, 6200.0), (21980.0, 12800.0)], "VDDUC0"),
         ("U7_VDDUC0_CoreNorth", [(21980.0, 22700.0), (21980.0, 19300.0), (21980.0, 26000.0)], "VDDUC0"),
@@ -589,7 +599,8 @@ def _compile_task1(cfg: Dict[str, Any], ws: Path) -> Dict[str, Any]:
 
 def _compile_task2(cfg: Dict[str, Any], ws: Path) -> Dict[str, Any]:
     io_cfg = cfg["design_io"]
-    build_dir = ws / io_cfg["output_build_dir"]
+    exp_wd = None if ws.resolve() == _PDN_REPO_ROOT else ws
+    build_dir = _resolve_pdn_out_dir(io_cfg["output_build_dir"], explicit_work_dir=exp_wd)
     build_dir.mkdir(parents=True, exist_ok=True)
     z_cfg = cfg["zone_routing_parameters"]
     z1 = z_cfg["zone1_surface_escape"]
@@ -598,11 +609,16 @@ def _compile_task2(cfg: Dict[str, Any], ws: Path) -> Dict[str, Any]:
     z5 = z_cfg["zone5_base_bga_curved_recess_and_lsc"]
     cr = z5["curved_recess_rules"]
 
-    edtc_pins = _read_csv_rows(ws / io_cfg["edtc_pin_map_csv"])
-    edtc_syms = _read_csv_rows(ws / io_cfg["edtc_symbols_csv"])
-    bga_balls = _read_csv_rows(ws / io_cfg["bga_map_csv"])
-    lsc_caps  = _read_csv_rows(ws / io_cfg["lsc_placed_map_csv"])
-    u9_pins   = _read_csv_rows(ws / io_cfg["u9_pins_csv"])
+    s1_dir = _resolve_s1_dir(explicit_work_dir=exp_wd)
+    def _pick(rel_p: str) -> Path:
+        cand = s1_dir / Path(rel_p).name
+        return cand if cand.is_file() else (ws / rel_p)
+
+    edtc_pins = _read_csv_rows(_pick(io_cfg["edtc_pin_map_csv"]))
+    edtc_syms = _read_csv_rows(_pick(io_cfg["edtc_symbols_csv"]))
+    bga_balls = _read_csv_rows(_pick(io_cfg["bga_map_csv"]))
+    lsc_caps  = _read_csv_rows(_pick(io_cfg["lsc_placed_map_csv"]))
+    u9_pins   = _read_csv_rows(_pick(io_cfg["u9_pins_csv"]))
 
     u9_edtc_profs = compute_real_edtc_profiles(edtc_pins, edtc_syms, list(U9_EDTC_BODIES.keys()))
     grid = FastXYClearanceGrid(cell_um=250.0)
@@ -820,7 +836,8 @@ def _compile_task2(cfg: Dict[str, Any], ws: Path) -> Dict[str, Any]:
 
 def _compile_task3(cfg: Dict[str, Any], ws: Path) -> Dict[str, Any]:
     io_cfg = cfg["design_io"]
-    build_dir = ws / io_cfg["output_build_dir"]
+    exp_wd = None if ws.resolve() == _PDN_REPO_ROOT else ws
+    build_dir = _resolve_pdn_out_dir(io_cfg["output_build_dir"], explicit_work_dir=exp_wd)
     build_dir.mkdir(parents=True, exist_ok=True)
     z_cfg = cfg["zone_routing_parameters"]
     z3 = z_cfg["zone3_compact_edtc_and_4strip_core_pth"]
@@ -828,11 +845,16 @@ def _compile_task3(cfg: Dict[str, Any], ws: Path) -> Dict[str, Any]:
     z5 = z_cfg["zone5_base_bga_curved_recess_and_lsc"]
     cr = z5["curved_recess_rules"]
 
-    edtc_pins = _read_csv_rows(ws / io_cfg["edtc_pin_map_csv"])
-    edtc_syms = _read_csv_rows(ws / io_cfg["edtc_symbols_csv"])
-    bga_balls = _read_csv_rows(ws / io_cfg["bga_map_csv"])
-    lsc_caps  = _read_csv_rows(ws / io_cfg["lsc_placed_map_csv"])
-    u13_pins  = _read_csv_rows(ws / io_cfg["u13_u41_u5_pins_csv"])
+    s1_dir = _resolve_s1_dir(explicit_work_dir=exp_wd)
+    def _pick(rel_p: str) -> Path:
+        cand = s1_dir / Path(rel_p).name
+        return cand if cand.is_file() else (ws / rel_p)
+
+    edtc_pins = _read_csv_rows(_pick(io_cfg["edtc_pin_map_csv"]))
+    edtc_syms = _read_csv_rows(_pick(io_cfg["edtc_symbols_csv"]))
+    bga_balls = _read_csv_rows(_pick(io_cfg["bga_map_csv"]))
+    lsc_caps  = _read_csv_rows(_pick(io_cfg["lsc_placed_map_csv"]))
+    u13_pins  = _read_csv_rows(_pick(io_cfg["u13_u41_u5_pins_csv"]))
 
     rails = cfg["target_domains"]["primary_hbm_site"]["rails"]
     pwr_rails = (rails["vddq"], rails["vddc"], rails["vddql"], rails["vpp"])
@@ -1059,7 +1081,8 @@ def compile_all_3_task_templates(workspace: Path | None = None) -> Dict[str, Any
         "task2": r2,
         "task3": r3,
     }
-    out_master = ws / "agent04_pdn_architect" / "reports" / "template_builds" / "all_3_tasks_template_build_audit.json"
+    exp_wd = None if (workspace is not None and workspace.resolve() == _PDN_REPO_ROOT) else workspace
+    out_master = _resolve_pdn_out_dir("agent04_pdn_architect/reports/template_builds", explicit_work_dir=exp_wd) / "all_3_tasks_template_build_audit.json"
     out_master.parent.mkdir(parents=True, exist_ok=True)
     out_master.write_text(json.dumps(master, indent=2), encoding="utf-8")
     return master

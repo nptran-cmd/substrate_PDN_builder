@@ -313,8 +313,13 @@ def export_full_27layer_apd_implementation(
       2. 100% concentric `PP` & `BU` vias on `7 PTH/mm²` Core PTHs (`0.0 um` offset)
       3. Atomic net-matched stack pruning on `10F/9F..5F` and `5B..9B/10B` (`0` overlaps, `0` dangling vias)
     """
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_output_dir
+    except ImportError:
+        from pdn_paths import resolve_output_dir  # type: ignore
+
     ws = Path(__file__).resolve().parent.parent.parent
-    out_dir = ws / "pdn_sandbox" / "apd_implementation_out"
+    out_dir = resolve_output_dir("pdn_sandbox/apd_implementation_out")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     vdduc_bumps, vss_bumps = load_u7_vdduc0_and_vss_bumps(ws)

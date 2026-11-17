@@ -1,23 +1,29 @@
 # Substrate PDN Builder (Agent 04 — PDN Architect)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Skills](https://img.shields.io/badge/Bundled_Skills-9-brightgreen.svg)](#bundled-skills)
+[![Skills](https://img.shields.io/badge/Bundled_Skills-19-brightgreen.svg)](#bundled-skills)
 [![Agent Ready](https://img.shields.io/badge/Agent-Gemini_CLI_%7C_Antigravity-orange.svg)](#quickstart--installation)
 
-> **Autonomous 27-layer IC package substrate Power Delivery Network (PDN) synthesis, Dynamic/Static copper shape builder, multi-family eDTC & LSC recess cavity engine, and headless Cadence Allegro / APD SKILL automation agent.**
+> **Autonomous 27-layer IC package substrate Power Delivery Network (PDN) synthesis across all 4 rail groups (`Core VDDC/SRAM`, `Uncore VDDUC`, `Chiplet VDDCH`, `HBM`) and all 8 PDN routing steps, with Dynamic/Static copper shapes, multi-family `eDTC` & curved `LSC_CAVITY` recess engines, and headless Cadence Allegro / APD SKILL automation.**
 
 ---
 
 ## 📖 Overview
 
-This repository packages the **Substrate PDN Builder (Agent 04 — PDN Architect)** with all required agent instructions (`.gemini/GEMINI.md`), modular skills (`skills/<name>/SKILL.md`), reusable automation scripts, and ready-to-use **Example Prompts** (`prompts/EXAMPLE_PROMPTS.md`).
+This repository packages the **Substrate PDN Builder (Agent 04 — PDN Architect)** with all required agent instructions (`.gemini/GEMINI.md`), **19 modular skills** (`skills/<name>/SKILL.md`), reusable Python/SKILL automation engines, and ready-to-use **Example Prompts** (`prompts/EXAMPLE_PROMPTS.md`).
 
 ### Key Architectural Highlights
-- **Multi-Domain 27-Layer PDN Synthesis (`SURFACE` -> `BASE`)**: Supports single-rail (`VDDUC*`, `VDDCH*`), dual co-resident (`LDA` `VDDC*` + `VDD_0P8_SRAM_CC*`), and 4-rail HBM4E + EMIB (`VDDQ`, `VDDC`, `VDDQL`, `VPP` + `VSS`) domains.
+- **Unified 4-Rail-Group × 8-Step PDN Pipeline (`pdn_8step_flow.py`)**: End-to-end parameterized router across **`Core` (`VDDC* + SRAM`)**, **`Uncore` (`VDDUC*`)**, **`Chiplet` (`VDDCH*`)**, and **`HBM` (`VDDQ + VDDC + VDDQL + VPP`)**:
+  - **Step 1 (`SURFACE`)**: `FULL` VIP or any `M:N` ratio (`4:2`, `5:2`, `3:1`) with H/V/BOTH strapping (`0` floating bumps).
+  - **Step 2 (Front BU Transition)**: Same-net BU stack (`SURFACE -> 6F VDD / 7F VSS`, `<= 7` BU spans / `<= 3` in EMIB HSIO void).
+  - **Step 3 (Core PTH `4–11 PTH/mm²`)**: `PKG 0.8` (`270/432.5 um`, ceiling `9.01/8.56`) & `PKG 0.1` (`216.5/350 um`, full `4..11 PTH/mm²`), Staggered & 90° H/V, plus `eDTC` `300 um` Cavity KOZ + `150 um` Guard Metal (`700.0 um` center KOZ).
+  - **Step 4 (Prepreg `PP` Patterns + Substrate DR Audit)**: `1_VIA_CENTER`, `2_VIA_ON_PTH` (`45 um` PP-PP overlap), and `4_VIA_PER_PTH` audited against max vias/PTH pad (`1 [PKG0.1] / 2 [PKG0.8]`) & `67.5 um` Core/PP L/S.
+  - **Step 5 (BGA Via Clusters Options 1–4)**: `OPTION1_4VIA_SQUARE_2X2`, `OPTION2_5VIA_QUINCUNX`, `OPTION3_6VIA_HEX_RING`, plus **`OPTION4_4VIA_CENTER_ZERO_OVERLAP`** (`(±45.5, ±45.5) um`, `91.0 um` pitch, `0.0 um` pad overlap) across all VDD + `VSS` BGAs.
+  - **Step 6 (`BASE` LSC + Curved Recess)**: Aligned non-zigzag & curved EDT `LSC_CAVITY` (`R=508 um`, `254 um` BGA->Cav, `225 um` LSC->Cav) with `CONDUCTOR/BASE` `180°` alternation (`u9_vddc_sram_lsc_new_rule_sandbox.py`, `curved_recess_and_lsc_engine.py`).
+  - **Step 7 (Back BU Cluster Climb)**: Concentric BGA/LSC cluster climb (`BASE -> 6B VDD / 7B VSS`, `<= 7` spans, `0.0 um` overlap).
+  - **Step 8 (Transition ↔ PP & Core Bridge)**: Conflict-free `6F/7F -> 5F -> 4FCO` & `6B/7B -> 5B -> 4BCO` bridges verified with `audit_via_continuity_and_zero_overlap` (`0` overlaps across 27 layers).
 - **Dynamic Power/`VSS` Planes vs. Static Guard Band Metal**: Creates true Cadence APD Dynamic copper planes (`axlShapeChangeDynamicType` + `axlShapeDynamicUpdate`) while preserving `150 um` isolated Static Guard Band frames around `10F` EMIB silicon bridges and `4FCO`/`4BCO` embedded deep-trench capacitors (`eDTC`).
-- **Real Multi-Family `eDTC` Silicon Die & KOZ Engine**: Computes exact per-family silicon die, `+300 um` cavity, `+150 um` inner-core KOZ, and `+67.5 um` `4FCO`/`4BCO` plane KOZ boundaries (`N24792-018` `144p`, `N24792-017` `48p`, `N24792-016` `24p`).
-- **`BASE` LSC Placement, `180 deg` Cap-to-Cap Alternation & `recess_cavity_pdn` KOZ**: Places discrete LSCs strictly on `CONDUCTOR/BASE` with logical pin net assignments (`Pin 1 = VDD*`, `Pin 2 = VSS`), `180 deg` cap-to-cap polarity alternation, and designer-checkable mechanical recess KOZ contours (`+178 um` outer / `-225 um` inner / `R = 500 um`) on `SUBSTRATE GEOMETRY/recess_cavity_pdn`.
-- **Zero-Via-Overlap 27-Conductor Continuity (`9F -> 5F` & `9B -> 5B`)**: Enforces positive copper-to-copper pad clearance on every shared conductor layer (`0` duplicate or staggered pad overlaps) and verifies post-route 3D open/short connectivity (`0` rats, `0` open `10F` bridge pins, `0` floating branches, `0` copper shorts).
+- **Working-Directory Output Isolation (`pdn_paths.py`)**: Respects `SUBSTRATE_WORK_DIR` so SVGs, recipes, and `.mcm` build outputs write to the active user working folder without polluting the agent source tree.
 
 > **Note on Clean Repository Structure:** Only reusable agent definitions, skills, scripts, templates, and documentation are published here. All runtime logs, temporary dumps, and proprietary design databases are excluded via `.gitignore`.
 
@@ -45,14 +51,18 @@ substrate_PDN_builder/
 │   ├── hbm_surface_and_csb_router.py
 │   ├── lsc_pin_net_assigner.py
 │   ├── multi_rail_polygon_engine.py
+│   ├── pdn_8step_flow.py
 │   ├── pdn_architect.py
+│   ├── pdn_paths.py
 │   ├── pdn_prelearn.py
 │   ├── pdn_svg_sandbox.py
 │   ├── pth_4fco_4bco_router.py
 │   ├── stage1_input_builder.py
 │   ├── step1_step2_u9_u13_validator.py
 │   ├── surface_layer1_router.py
+│   ├── u6_8step_mcm_builder.py
 │   ├── u7_topside_bu_sandbox.py
+│   ├── u9_vddc_sram_lsc_new_rule_sandbox.py
 │   ├── u9_vddc_sram_surface_3to1_jog_router.py
 │   ├── upper_left_corner_pdn.py
 │   └── vdduc0_base_cavity_lsc_svg_generator.py
@@ -128,19 +138,29 @@ substrate_PDN_builder/
 
 ---
 
-## 🛠️ Bundled Skills
+## 🛠️ Bundled Skills (19 Skills)
 
 | Skill | Description | Bundled Scripts |
 | :--- | :--- | :--- |
-| [`base_lsc_bga_routing`](skills/base_lsc_bga_routing/SKILL.md) | Step 3 (BASE / BOTTOM Layer) Empty-BGA Pocket 0201 LSC Max-Packing Placer & 3-Option BGA/LSC Via-Cluster Routing Skill for Agent 04 (PDN Architect). Learns e... | *(Markdown Runbook)* |
-| [`emib_csb_and_hbm_surface_router`](skills/emib_csb_and_hbm_surface_router/SKILL.md) | Step 2 Bifurcated HBM Fine-Pitch SURFACE Gang-Bar & EMIB C0 / 10F CSB Escape Router for Agent 04 (pdn_architect). Routes East EMIB overlap bumps onto C0 (VU3... | *(Markdown Runbook)* |
-| [`full_27layer_apd_implementation`](skills/full_27layer_apd_implementation/SKILL.md) | End-to-end 27-layer (`SURFACE` L01 to `BASE` L27) PDN Architect Exporter and Cadence APD / Allegro SKILL Master Implementer (`apd_27layer_master_exporter.py`... | *(Markdown Runbook)* |
-| [`hbm_vdd_routing_flow`](skills/hbm_vdd_routing_flow/SKILL.md) | End-to-end (A-to-Z) 27-layer (`SURFACE` L01 through `BASE` L27) Multi-Rail HBM4E PDN routing flow for `U13` (`MEM5`: `VDDQ_0P85_HBM_MEM5`, `VDDC_1P0_HBM_MEM5... | *(Markdown Runbook)* |
-| [`multi_rail_plane_polygon_splitter`](skills/multi_rail_plane_polygon_splitter/SKILL.md) | Step 1 Multi-Rail Co-Planar Polygon Splitter & (x, y, layer) Net-Ownership Stack Pruner for Agent 04 (pdn_architect). Synthesizes N-rail co-planar voltage is... | *(Markdown Runbook)* |
-| [`pth_4fco_4bco_routing`](skills/pth_4fco_4bco_routing/SKILL.md) | Step 2 (4FCO <-> 4BCO) Core PTH & Prepreg Via-Stack Routing Skill for Agent 04 (PDN Architect). Solves staggered or 90-degree orthogonal (H&V aligned) same-n... | *(Markdown Runbook)* |
-| [`surface_layer1_routing`](skills/surface_layer1_routing/SKILL.md) | Layer 1 (SURFACE / TOP) Parameterized Die Bump-Via & Trace-Ganging Skill for Agent 04 (PDN Architect). Routes any target RefDes (e.g., U7) on SURFACE (12Cu)... | *(Markdown Runbook)* |
-| [`vddc_vddram_routing_flow`](skills/vddc_vddram_routing_flow/SKILL.md) | End-to-end (A-to-Z) 27-layer (`SURFACE` L01 through `BASE` L27) Co-Resident Dual-Power-Rail PDN routing flow for `VDDC*` (`VDDC0..3`) and `VDDSRAM` (`VDD_0P8... | *(Markdown Runbook)* |
-| [`vdduc_vddch_routing_flow`](skills/vdduc_vddch_routing_flow/SKILL.md) | End-to-end (A-to-Z) 27-layer (`SURFACE` L01 through `BASE` L27) PDN routing flow for `VDDUC*` (`VDDUC0..3` on `LDB` dies `U5..U8`) and `VDDCH*` (`VDDCH0..3`... | *(Markdown Runbook)* |
+| [`step1_surface_bump_routing`](skills/step1_surface_bump_routing/SKILL.md) | Step 1 PDN Skill: `SURFACE` FULL VIP or `M:N` ratio (`4:2`, `5:2`, `3:1`) with H/V/BOTH floating-bump jogging (`0` floating bumps). | *(Markdown Runbook)* |
+| [`step2_frontside_bu_transition`](skills/step2_frontside_bu_transition/SKILL.md) | Step 2 PDN Skill: Frontside BU stack (`SURFACE -> 6F VDD / 7F VSS`) obeying `<= 7` BU limit (`<= 3` in EMIB HSIO void). | *(Markdown Runbook)* |
+| [`step3_core_pth_routing`](skills/step3_core_pth_routing/SKILL.md) | Step 3 PDN Skill: Core PTH (`4..11 PTH/mm²`) Staggered / 90° H/V with `PKG0.8`/`PKG0.1` and `700 um` `eDTC` KOZ + Guard Metal. | *(Markdown Runbook)* |
+| [`step4_prepreg_pp_routing`](skills/step4_prepreg_pp_routing/SKILL.md) | Step 4 PDN Skill: Prepreg (`PP`) `1_VIA_CENTER`, `2_VIA_ON_PTH`, `4_VIA_PER_PTH` patterns + Substrate DR audit. | *(Markdown Runbook)* |
+| [`step5_bga_via_cluster_routing`](skills/step5_bga_via_cluster_routing/SKILL.md) | Step 5 PDN Skill: BGA `12B<->BASE` clusters (`Options 1..3` + `OPTION4_4VIA_CENTER_ZERO_OVERLAP` at `±45.5 um`) for all VDD + VSS BGAs. | *(Markdown Runbook)* |
+| [`step6_base_lsc_recess_placement`](skills/step6_base_lsc_recess_placement/SKILL.md) | Step 6 PDN Skill: `CONDUCTOR/BASE` `0201` LSC packing with `180°` alternation and curved `LSC_CAVITY` recess compliance. | *(Markdown Runbook)* |
+| [`step7_backside_bu_transition`](skills/step7_backside_bu_transition/SKILL.md) | Step 7 PDN Skill: Backside BGA/LSC cluster climb (`BASE -> 6B VDD / 7B VSS`) obeying `<= 7` BU stack and `0.0 um` overlap. | *(Markdown Runbook)* |
+| [`step8_transition_pp_core_connection`](skills/step8_transition_pp_core_connection/SKILL.md) | Step 8 PDN Skill: Connect `6F/7F` & `6B/7B` to PP/Core (`5F->4FCO`, `4BCO->5B`) with `0` overlaps across 27 layers. | *(Markdown Runbook)* |
+| [`uncore_vdduc_routing_flow`](skills/uncore_vdduc_routing_flow/SKILL.md) | End-to-End 8-Step PDN flow for Uncore `VDDUC0..3 + VSS` (`LDB` `U7/U5/U8/U6`). | *(Markdown Runbook)* |
+| [`chiplet_vddch_routing_flow`](skills/chiplet_vddch_routing_flow/SKILL.md) | End-to-End 8-Step PDN flow for Chiplet `VDDCH0..3 + VSS` (`LDC` `U2/U4/U3/U1`). | *(Markdown Runbook)* |
+| [`base_lsc_bga_routing`](skills/base_lsc_bga_routing/SKILL.md) | BASE Empty-BGA Pocket 0201 LSC Max-Packing & 4-Option BGA/LSC Via-Cluster Routing Skill (`Options 1..4`). | *(Markdown Runbook)* |
+| [`emib_csb_and_hbm_surface_router`](skills/emib_csb_and_hbm_surface_router/SKILL.md) | Bifurcated HBM Fine-Pitch SURFACE Gang-Bar & EMIB C0 / 10F CSB Escape Router (`VU30_19_*`, lateral `8F` dogbones). | *(Markdown Runbook)* |
+| [`full_27layer_apd_implementation`](skills/full_27layer_apd_implementation/SKILL.md) | End-to-end 27-layer PDN Architect Exporter and Cadence APD / Allegro SKILL Master Implementer. | *(Markdown Runbook)* |
+| [`hbm_vdd_routing_flow`](skills/hbm_vdd_routing_flow/SKILL.md) | End-to-end 27-layer Multi-Rail HBM4E PDN routing flow (`U13..U24` + `U41..U52`). | *(Markdown Runbook)* |
+| [`multi_rail_plane_polygon_splitter`](skills/multi_rail_plane_polygon_splitter/SKILL.md) | Multi-Rail Co-Planar Polygon Splitter & `(x, y, layer)` Net-Ownership Stack Pruner. | *(Markdown Runbook)* |
+| [`pth_4fco_4bco_routing`](skills/pth_4fco_4bco_routing/SKILL.md) | Core PTH (`4..11 PTH/mm²`) & Prepreg (`1/2/4-via`) Routing Skill with `eDTC` KOZ & DR verification. | *(Markdown Runbook)* |
+| [`surface_layer1_routing`](skills/surface_layer1_routing/SKILL.md) | Layer 1 (`SURFACE`) Parameterized Die Bump-Via (`FULL` or `M:N`) & Trace-Ganging Skill. | *(Markdown Runbook)* |
+| [`vddc_vddram_routing_flow`](skills/vddc_vddram_routing_flow/SKILL.md) | End-to-end 27-layer Co-Resident Dual-Rail Core `VDDC*` + `VDDSRAM` (`LDA` `U9/U12/U88/U10`) routing flow. | *(Markdown Runbook)* |
+| [`vdduc_vddch_routing_flow`](skills/vdduc_vddch_routing_flow/SKILL.md) | Combined Single-Power-Rail `VDDUC*` & `VDDCH*` 27-layer PDN flow reference. | *(Markdown Runbook)* |
 
 ---
 

@@ -1252,25 +1252,26 @@ def render_u9_surface_3to1_inspection_svg(
 
 
 def main() -> None:
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import (
+            resolve_output_dir,
+            resolve_output_file,
+            resolve_stage1_inputs_dir,
+        )
+    except ImportError:
+        from pdn_paths import resolve_output_dir, resolve_output_file, resolve_stage1_inputs_dir  # type: ignore
+
+    default_pins = resolve_stage1_inputs_dir() / "u9_full_pins.csv"
+    default_svg = resolve_output_file("agent04_pdn_architect/pdn_sandbox/mockup_U9_SURFACE_VDDC0_SRAM0_3to1_VerticalJog.svg")
+    default_rep = resolve_output_dir("agent04_pdn_architect/reports/u9_surface_3to1_vertical_jog")
+
     parser = argparse.ArgumentParser(description="U9 (LDA) CONDUCTOR/SURFACE 3:1 Vertical-Jog Router & SVG Generator")
-    parser.add_argument(
-        "--u9-pins-csv",
-        type=Path,
-        default=Path(__file__).resolve().parents[1] / "stage1_inputs" / "u9_full_pins.csv",
-    )
+    parser.add_argument("--u9-pins-csv", type=Path, default=default_pins)
     parser.add_argument("--ratio", type=str, default="3:1", help="VDD:VSS VIP ratio (default: 3:1)")
     parser.add_argument("--trace-width-um", type=float, default=15.0)
     parser.add_argument("--min-gap-um", type=float, default=15.0)
-    parser.add_argument(
-        "--out-svg",
-        type=Path,
-        default=Path(__file__).resolve().parents[1] / "pdn_sandbox" / "mockup_U9_SURFACE_VDDC0_SRAM0_3to1_VerticalJog.svg",
-    )
-    parser.add_argument(
-        "--out-report-dir",
-        type=Path,
-        default=Path(__file__).resolve().parents[1] / "reports" / "u9_surface_3to1_vertical_jog",
-    )
+    parser.add_argument("--out-svg", type=Path, default=default_svg)
+    parser.add_argument("--out-report-dir", type=Path, default=default_rep)
     args = parser.parse_args()
 
     with args.u9_pins_csv.open("r", encoding="utf-8") as fh:
@@ -1283,6 +1284,7 @@ def main() -> None:
         min_gap_um=args.min_gap_um,
     )
 
+    args.out_svg.parent.mkdir(parents=True, exist_ok=True)
     svg_path = render_u9_surface_3to1_inspection_svg(res, args.out_svg)
     args.out_report_dir.mkdir(parents=True, exist_ok=True)
     recipe_path = args.out_report_dir / "u9_surface_3to1_jog_recipe.txt"

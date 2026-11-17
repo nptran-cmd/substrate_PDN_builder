@@ -135,7 +135,7 @@ procedure( pdnMakeRoundedRectPathLsc( x1 y1 x2 y2 rad )
 
 procedure( pdnEnsureLscDeviceFile( actualSymName )
   let( (devName devFile dp psmList padList devList libDir outP)
-    libDir = "G:/My Drive/HFC_TO_docs/Library"
+    libDir = "<cadence_library_dir>"
     when( isDir(libDir)
       psmList = axlGetVariableList("psmpath")
       unless( member(libDir psmList)

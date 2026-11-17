@@ -248,9 +248,18 @@ def run_upper_left_corner_pdn(
 
 
 def main() -> None:
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_output_dir, resolve_output_file
+    except ImportError:
+        from pdn_paths import resolve_output_dir, resolve_output_file  # type: ignore
+
+    default_out_dir = resolve_output_dir("agent04_pdn_architect/reports/upper_left_corner")
+    default_out_mcm = resolve_output_file(
+        "agent04_pdn_architect/MCM_test/PDN_test_UpperLeft_VDDCH3_VDDUC1_VDDC1_SRAM1_HBM.mcm"
+    )
     parser = argparse.ArgumentParser(description="Build Upper-Left Corner 27-Layer PDN MCM.")
-    parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
-    parser.add_argument("--out-mcm", type=Path, default=DEFAULT_OUT_MCM)
+    parser.add_argument("--out-dir", type=Path, default=default_out_dir)
+    parser.add_argument("--out-mcm", type=Path, default=default_out_mcm)
     parser.add_argument(
         "--hbm-dies",
         type=str,

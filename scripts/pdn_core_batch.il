@@ -79,7 +79,13 @@ procedure( pdn_parse_csv_list(csv_str)
 
 procedure( pdn_get_cwd()
     let((cwd)
-        cwd = axlGetVariable("cwd")
+        cwd = getShellEnvVar("PDN_CWD")
+        if( cwd == nil || cwd == "" then
+            cwd = axlGetVariable("PDN_CWD")
+        )
+        if( cwd == nil || cwd == "" then
+            cwd = axlGetVariable("cwd")
+        )
         if( cwd == nil || cwd == "" then
             cwd = "."
         )

@@ -380,7 +380,13 @@ def synthesize_and_render_vdduc0_cavity_svg(
     other_bga_balls = [b for b in bgas if b["net"] not in ("VDDUC0", "VSS")]
 
     if out_svg_path is None:
-        out_dir = workspace / "agent04_pdn_architect" / "pdn_sandbox"
+        try:
+            from agent04_pdn_architect.cad_cli.pdn_paths import REPO_ROOT, resolve_output_dir
+        except ImportError:
+            from pdn_paths import REPO_ROOT, resolve_output_dir  # type: ignore
+
+        exp_wd = None if workspace.resolve() == REPO_ROOT else workspace
+        out_dir = resolve_output_dir("agent04_pdn_architect/pdn_sandbox", explicit_work_dir=exp_wd)
         out_dir.mkdir(parents=True, exist_ok=True)
         if sro_to_sro_min_um >= 200.0:
             out_svg_path = out_dir / "mockup_VDDUC0_BASE_Cavity_Rule_LSC_Placement.svg"

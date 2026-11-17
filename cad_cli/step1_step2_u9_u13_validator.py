@@ -458,10 +458,16 @@ def synthesize_and_validate_step1_step2_u9_u13(
       4. Complete `VSS` & `VDD` `9F -> 5F` and `9B -> 5B` middle-BU continuity + `0` via pad overlap across all 27 layers
       5. Post-route 3D connectivity & open/short verification!
     """
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_output_dir, resolve_stage1_inputs_dir
+    except ImportError:
+        from pdn_paths import resolve_output_dir, resolve_stage1_inputs_dir  # type: ignore
+
     ws = Path(__file__).resolve().parent.parent.parent
-    s1 = ws / "agent04_pdn_architect" / "stage1_inputs"
-    out_dir = ws / "agent04_pdn_architect" / "reports" / "step1_step2_u9_u13"
-    svg_dir = ws / "agent04_pdn_architect" / "pdn_sandbox"
+    s1 = resolve_stage1_inputs_dir()
+    out_dir = resolve_output_dir("agent04_pdn_architect/reports/step1_step2_u9_u13")
+    svg_dir = resolve_output_dir("agent04_pdn_architect/pdn_sandbox")
+    svg_dir.mkdir(parents=True, exist_ok=True)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     def _read_csv_rows(p: Path) -> List[Dict[str, str]]:

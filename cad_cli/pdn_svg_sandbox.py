@@ -317,11 +317,24 @@ def run_stage2_3_sandbox_and_recipe(
                     f"LSC_SYM|REFDES={ref}|SYM=LSC_{lsc_cap_type}|X={lx:.3f}|Y={ly:.3f}|ROT=0.0|MIRROR=NO|LAYER=BASE"
                 )
 
-    recipe_p = Path(recipe_output_path)
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_output_dir, resolve_output_file
+    except ImportError:
+        from pdn_paths import resolve_output_dir, resolve_output_file  # type: ignore
+
+    recipe_p = (
+        resolve_output_file(recipe_output_path)
+        if recipe_output_path == "agent04_pdn_architect/reports/pdn_import_recipe.txt"
+        else Path(recipe_output_path)
+    )
     recipe_p.parent.mkdir(parents=True, exist_ok=True)
     recipe_p.write_text("\n".join(recipe_lines) + "\n", encoding="utf-8")
 
-    svg_dir = Path(svg_sandbox_dir)
+    svg_dir = (
+        resolve_output_dir(svg_sandbox_dir)
+        if svg_sandbox_dir == "agent04_pdn_architect/svg_sandbox"
+        else Path(svg_sandbox_dir)
+    )
     svg_files = _export_all_sandbox_svgs(
         svg_dir=svg_dir,
         zones=zones,

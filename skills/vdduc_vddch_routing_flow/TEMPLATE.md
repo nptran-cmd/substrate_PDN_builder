@@ -1,107 +1,46 @@
-# `VDDUC` & `VDDCH` Routing Flow — Configuration & Recipe Templates
+# Task 1 (`VDDUC*` & `VDDCH*`) — Designer-Editable Full 27-Layer PDN Design Template
 
-## 1. Domain Configuration JSON Template (`vdduc_vddch_config.json`)
-
-```json
-{
-  "flow_name": "VDDUC_VDDCH_27LAYER_PDN_FLOW",
-  "target_die": {
-    "refdes": "U7",
-    "symbol_name": "HUTTON_HILL_LDB_BC_A0",
-    "vdd_net": "VDDUC0",
-    "vss_net": "VSS"
-  },
-  "zone1_surface_options": {
-    "vdd_to_vss_via_ratio": "3:1",
-    "cell_period": 3,
-    "floating_bump_strap_direction": "HORIZONTAL",
-    "strap_width_um": 24.0,
-    "surface_via_padstack": "V77_49_77_SURFACE_12F_01A",
-    "emib_ubump_via_padstack": "VU30_19_35_SURFACE_C0_01B",
-    "min_cline_to_pad_drc_um": 18.0
-  },
-  "emib_bridge_design_rules": {
-    "adjacent_emib_refdes": ["U28", "U32", "U35", "U38", "U47", "U48", "U49"],
-    "c0_exclusivity_inside_bridge_only": true,
-    "cavity_wall_to_emib_die_um": 75.0,
-    "l12f_l11f_c4_pad_shape_to_cavity_min_um": 82.5,
-    "l12f_l11f_total_koz_from_emib_die_um": 157.5,
-    "l10f_no_plane_or_trace_under_emib_die": true,
-    "l10f_isolated_guard_ring_width_um": 150.0,
-    "l10f_c4_pad_shape_to_guard_ring_min_um": 50.0,
-    "l10f_c4_pad_shape_to_csb_pad_min_um": 372.0,
-    "csb_pad_diameter_um": 77.0,
-    "csb_min_pitch_um": 130.0,
-    "csb_max_stacked_via_below_10f": 2,
-    "edtc_cavity_to_emib_cavity_min_um": 1000.0,
-    "base_exclude_lsc_under_emib_die_shadow": true
-  },
-  "zone2_edtc_4fco_options": {
-    "edtc_refdes_list": ["C2238", "C2239", "C2209", "C2210", "C2211"],
-    "concentric_pin_landing_offset_um": 0.0,
-    "max_stacked_vias_on_edtc_pin": 2,
-    "cavity_koz_um": 300.0,
-    "guard_metal_width_um": 150.0,
-    "core_metal_to_guard_space_um": 67.5,
-    "block_all_routing_4fco_to_4bco_in_koz": true,
-    "require_solid_5b_plane_under_edtc": true
-  },
-  "zone3_core_pth_pp_options": {
-    "target_pth_density_per_mm2": 7.0,
-    "pth_grid_pattern": "STAGGERED",
-    "vdd_pth_padstack": "V282_5_150_282_5_2FCI_2BCI_01B",
-    "vss_pth_padstack": "V282_5_150_282_5_2FCI_2BCI_02A",
-    "concentric_pp_on_pth_offset_um": 0.0,
-    "same_net_pth_min_pitch_um": 270.0,
-    "diff_net_pth_min_pitch_um": 432.5
-  },
-  "zone1b_4_bu_stack_pruning": {
-    "vdd_plane_layers": ["12F", "10F", "8F", "6F", "4FCO", "2FCI", "2BCI", "4BCO", "6B", "8B", "10B", "12B"],
-    "vss_plane_layers": ["11F", "9F", "7F", "5F", "3FCI", "1FCI", "1BCI", "3BCI", "5B", "7B", "9B", "11B"],
-    "enforce_atomic_2via_net_matched_pruning": true,
-    "allow_dangling_vias": false
-  },
-  "zone5_base_lsc_and_recess_cavity": {
-    "lsc_symbol": "SM0201_690X390X550_01A",
-    "lsc_sro_to_sro_min_um": 250.0,
-    "bga_sro_to_lsc_sro_min_um": 500.0,
-    "enforce_recess_cavity_rule": true,
-    "bga_sro_to_cavity_min_um": 250.0,
-    "lsc_sro_to_cavity_min_um": 225.0,
-    "cavity_corner_radius_um": 500.0,
-    "cavity_min_xy_um": 1016.0,
-    "cavity_to_cavity_min_web_um": 508.0,
-    "base_ext_cu_signal_to_cavity_koz_um": 178.0,
-    "inner_cu_signal_to_cavity_koz_um": 203.0,
-    "lsc_uvia_padstack": "V90_65_90_12B_BASE_01A",
-    "lsc_vias_per_cap": 6,
-    "bga_via_cluster_option": "OPTION3_6VIA_HEX_RING"
-  }
-}
-```
+> [!IMPORTANT]
+> **Live Editable Template File:** [`task1_vdduc_vddch_27layer_template.json`](file:///<agent_workspace>/agent04_pdn_architect/templates/task1_vdduc_vddch_27layer_template.json)
+> **27-Layer Compiler CLI:** [`pdn_27layer_template_runner.py`](file:///<agent_workspace>/agent04_pdn_architect/templates/pdn_27layer_template_runner.py)
+> **Unified Cadence APD SKILL Importer:** [`apd_unified_27layer_template_importer.il`](file:///<agent_workspace>/agent04_pdn_architect/templates/apd_unified_27layer_template_importer.il)
 
 ---
 
-## 2. Pipe-Delimited Master Recipe Record Specification (`*_APD_Master_Recipe.txt`)
+## 1. Quick-Start Workflow for Designers
 
-Following the workspace rule (*Python parses large CSVs and outputs a flat pipe-delimited text file loaded into SKILL `makeTable` with zero stack overflow*), the SKILL template consumes 6 deterministic record types:
+1. **Open & Modify Inputs:** Edit [`task1_vdduc_vddch_27layer_template.json`](file:///<agent_workspace>/agent04_pdn_architect/templates/task1_vdduc_vddch_27layer_template.json):
+   - **`design_io`:** Point to your input `bga_map.csv`, `edtc_pin_map.csv`, `edtc_symbols.csv`, `lsc_placed_map.csv`, readonly source `.mcm`, and target `output_mcm_path`.
+   - **`target_domains`:** Set `LDB` (`U7 -> U8, U6, U5` `VDDUC0..3`) and `LDC` (`U2 -> U4, U3, U1` `VDDCH0..3`) RefDes, net names, adjacent EMIBs, and `eDTC` lists.
+   - **`padstack_library`:** Swap any via padstack across all 24 dielectric spans (`SURFACE_C0`, `SURFACE_12F`, `12F_11F` .. `12B_BASE`).
+   - **`zone_routing_parameters`:**
+     - `zone1_surface_escape`: Choose `surface_vip_ratio` (`"FULL"`, `"3:1"`, `"4:2"`, `"5:2"`) and `strap_direction` (`"VERTICAL"`, `"HORIZONTAL"`, `"BOTH"`).
+     - `zone3_edtc_and_core_pth`: Adjust real per-part-number `eDTC` KOZs (`N24792-018` `96p`, `017` `48p`, `016` `24p`), `core_pth_density_per_mm2` (`5..8`), and `core_pth_pattern` (`"STAGGERED"` / `"ORTHOGONAL_90DEG_*"`).
+     - `zone4_middle_bu_continuity_and_stack_limits`: Control `9F->5F` & `9B->5B` stitch pitch (`285 µm`) and stack limits (`<=7` BU, `<=5` on PTH).
+     - `zone5_base_bga_curved_recess_and_lsc`: Select BGA cluster (`OPTION1_4VIA_SQUARE_2X2`, `OPTION2_5VIA_QUINCUNX`, `OPTION3_6VIA_HEX_RING`), LSC SRO rule (`175` or `250 µm`), and Curved BGA-Following Recess rules (`mill_tool_radius_um: 508.0`, `bga_sro_to_cavity_min_um: 254.0`, `ext_cu_to_cavity_koz_um: 178.0`, `lsc_sro_to_cavity_min_um: 225.0`).
+   - **`stackup_all_27_layers`:** Customize copper thickness, `DYNAMIC` vs. `DYNAMIC_PLUS_STATIC_GUARD` shape mode, nets, and split clearances on any layer `L01 SURFACE` .. `L27 BASE`.
+2. **Compile & Validate All 27 Layers:**
+   ```powershell
+   python -m agent04_pdn_architect.templates.pdn_27layer_template_runner --config agent04_pdn_architect/templates/task1_vdduc_vddch_27layer_template.json
+   ```
+3. **Inspect & Build `.mcm`:**
+   - Review `Task1_VDDUC_VDDCH_27Layer_Stackup_Summary.svg`, `Task1_VDDUC_VDDCH_BASE_Curved_Recess_LSC.svg`, and `Task1_VDDUC_VDDCH_27Layer_Layer_By_Layer_Summary.json`.
+   - Run `Task1_VDDUC_VDDCH_run_apd_headless.bat` to generate the new `.mcm` database without modifying `PDN_test.mcm`.
 
-```text
-# 1. Copper Plane Shape (Closed Filled Shape on CONDUCTOR/<layer>, isFilled = t)
-PLANE|<net_name>|<layer>|<x1_um>|<y1_um>|<x2_um>|<y2_um>
+---
 
-# 2. Plane Void Cutout (Closed Void inside immediately preceding PLANE for 4FCO..4BCO eDTC KOZ)
-PLANE_VOID|<layer>|<x1_um>|<y1_um>|<x2_um>|<y2_um>
+## 2. 27-Layer Stackup Summary (`L01 SURFACE` $\rightarrow$ `L27 BASE`)
 
-# 3. Bottom (BASE) Mirrored 0201 LSC Component Placement + Pin Net Re-Mapping
-LSC_SYM|<refdes>|<symbol_name>|<x_um>|<y_um>|<rotation_deg>|MIRROR_YES|<pin1_net>|<pin2_net>
-
-# 4. Mechanical Recess Cavity Outline & BASE Copper/Signal Keepout Halo
-CAVITY_OUTLINE|<pocket_id>|<x1_um>|<y1_um>|<x2_um>|<y2_um>|<corner_r_um>|<ext_koz_um>
-
-# 5. Via Instance (Exact .mcm Padstack & Start/End Layer Span)
-VIA|<net_name>|<padstack_name>|<start_layer>|<end_layer>|<x_um>|<y_um>|<zone_tag>
-
-# 6. CLINE Strap Segment (SURFACE M:N Horizontal/Vertical Straps or Inner Busbars)
-CLINE|<net_name>|<layer>|<width_um>|<x1_um>|<y1_um>|<x2_um>|<y2_um>|<zone_tag>
-```
+| Order | Layer | Shape Mode | Primary Nets | Key Routing & DRC Rules |
+| :---: | :---: | :--- | :--- | :--- |
+| `L01` | `SURFACE` | `CLINE_AND_PADS` | `VDDUC*`, `VDDCH*`, `VSS` | `FULL` or `3:1` VIP + `24 µm` straps; EMIB uBumps drop to `C0` |
+| `L02` | `C0` | `DYNAMIC` | `VSS` | Strictly inside EMIB bridge die outlines (`0` copper outside) |
+| `L03..L04` | `12F, 11F` | `DYNAMIC` | `VDD` / `VSS` | `157.5 µm` EMIB cavity+pad KOZ voided |
+| `L05` | `10F` | `DYNAMIC_PLUS_STATIC_GUARD` | `VDD`, `VSS` | Static `150 µm` isolated EMIB guard ring; `<=2` stacked vias below CSB |
+| `L06..L10` | `9F..5F` | `DYNAMIC` | Alternating `VSS`/`VDD` | Unbroken `9F->5F` `VSS` & `8F->6F` `VDD` stitch (`0` via overlap) |
+| `L11` | `4FCO` | `DYNAMIC_PLUS_STATIC_GUARD` | `VDD`, `VSS` | Real per-part `eDTC` KOZ + Static `150 µm` guard band + `0.0 µm` concentric landing |
+| `L12..L18` | `3FCI..4BCO` | `DYNAMIC` (+ `4BCO` Guard) | Alternating `VDD`/`VSS` | `7 PTH/mm²` concentric `1-PP/PTH` Core (`2FCI<->2BCI`); `eDTC` KOZ voided |
+| `L19` | `5B` | `DYNAMIC` | `VSS` | Mandatory solid unbroken `VSS` shield under all `eDTC` shadows |
+| `L20..L25` | `6B..11B` | `DYNAMIC` | Alternating `VDD`/`VSS` | Unbroken `5B->9B` `VSS` & `6B->12B` `VDD` stitch; `11B` full `VSS` shield |
+| `L26` | `12B` | `DYNAMIC` | `VDDUC*`, `VDDCH*` | Heavy `40 µm` GCP plane (`>=67.5 µm` split) directly feeding `BASE` LSCs |
+| `L27` | `BASE` | `PADS_AND_CAVITY` | `VDDUC*`, `VDDCH*`, `VSS` | `4/5/6-via` BGA clusters + Curved `POLY_CAVITY` (`recess_cavity_pdn`) + `180°` `SM0201` LSCs on `CONDUCTOR/BASE` |

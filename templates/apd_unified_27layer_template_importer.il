@@ -251,7 +251,7 @@ procedure( pdnTplCleanU7DomainOnce()
 
 procedure( pdnTplEnsureLibPaths()
   let( (libDir psmList padList devList)
-    libDir = "G:/My Drive/HFC_TO_docs/Library"
+    libDir = "<cadence_library_dir>"
     when( isDir(libDir)
       psmList = axlGetVariableList("psmpath")
       unless( member(libDir psmList) axlSetVariable("psmpath" cons(libDir psmList)) )
@@ -433,9 +433,6 @@ procedure( pdnRunUnified27LayerTemplateBatch( recipePath outMcmPath reportPath )
                     pdnTplCreatePolyRing(kozPts cavPts recessLayer)
                     errset(axlDBCreatePath(axlPathStart(kozPts 25.0) recessLayer) nil)
                     recessKozCnt = recessKozCnt + 2
-                    when( axlIsLayer("ROUTE KEEPOUT/BASE")
-                      errset(axlDBCreateShape(axlPathStart(kozPts 0.0) t "ROUTE KEEPOUT/BASE") nil)
-                    )
                   )
                   when( safePts && length(safePts) >= 4 && cavPts && length(cavPts) >= 4
                     pdnTplCreatePolyRing(cavPts safePts recessLayer)
@@ -447,7 +444,10 @@ procedure( pdnRunUnified27LayerTemplateBatch( recipePath outMcmPath reportPath )
 
               ; 7. LSC_DELETE|<refdes>
               ( rType == "LSC_DELETE" && length(parts) >= 2
-                let( (cObj)
+                let( (cObj sObj)
+                  axlSetVariable("logic_edit_enabled" "t")
+                  sObj = axlDBFindByName('symbol nth(1 parts))
+                  when( sObj errset(axlDeleteObject(sObj) nil) )
                   cObj = axlDBFindByName('component nth(1 parts))
                   when( cObj
                     when( cObj->symbol errset(axlDeleteObject(cObj->symbol) nil) )
@@ -580,7 +580,7 @@ procedure( pdnRunUnified27LayerTemplateBatch( recipePath outMcmPath reportPath )
         fprintf(outP "CLINES=%d\n" clineCnt)
         fprintf(outP "ERRORS=%d\n" errCnt)
 
-        checkNets = list("VDDUC0" "VDDCH0" "VDDC0" "VDD_0P8_SRAM_CC0" "VDDQ_0P85_HBM_MEM5" "VDDC_1P0_HBM_MEM5" "VDDQL5" "VPP_1P8_HBM_MEM5" "VSS")
+        checkNets = list("VDDUC0" "VDDUC1" "VDDUC2" "VDDUC3" "VDDCH0" "VDDC0" "VDD_0P8_SRAM_CC0" "VDDQ_0P85_HBM_MEM5" "VDDC_1P0_HBM_MEM5" "VDDQL5" "VPP_1P8_HBM_MEM5" "VSS")
         foreach( cn checkNets
           let( (nObj vc cc sc pc brCnt ratCnt openPinBr floatingBr)
             nObj = axlDBFindByName('net cn)
@@ -590,19 +590,22 @@ procedure( pdnRunUnified27LayerTemplateBatch( recipePath outMcmPath reportPath )
             openPinBr = 0 floatingBr = 0
             when( nObj && nObj->branches
               foreach( br nObj->branches
-                let( (bp bv bc bs sampleXY inDomain)
-                  bp = 0 bv = 0 bc = 0 bs = 0 sampleXY = nil
+                let( (bp bv bc bs sampleXY samplePad inDomain)
+                  bp = 0 bv = 0 bc = 0 bs = 0 sampleXY = nil samplePad = ""
                   foreach( ch br->children
                     case( ch->objType
                       ("via"   vc = vc + 1  bv = bv + 1)
                       ("path"  cc = cc + 1  bc = bc + 1)
                       ("shape" sc = sc + 1  bs = bs + 1)
-                      ("pin"   pc = pc + 1  bp = bp + 1  unless( sampleXY sampleXY = ch->xy ))
+                      ("pin"   pc = pc + 1  bp = bp + 1  unless( sampleXY sampleXY = ch->xy  samplePad = if( ch->definition && ch->definition->name then upperCase(ch->definition->name) else "" ) ))
                     )
                   )
                   if( cn == "VSS" then
-                    inDomain = sampleXY && (
+                    inDomain = sampleXY && !(rexMatchp("^C18_" samplePad) || rexMatchp("^C21_" samplePad) || rexMatchp("^PRS_" samplePad)) && (
                       (car(sampleXY) >= 13500.0 && car(sampleXY) <= 35500.0 && cadr(sampleXY) >= -4000.0 && cadr(sampleXY) <= 36000.0) ||
+                      (car(sampleXY) >= -30200.0 && car(sampleXY) <= -16000.0 && cadr(sampleXY) >= -31800.0 && cadr(sampleXY) <= -150.0) ||
+                      (car(sampleXY) >= -30200.0 && car(sampleXY) <= -16000.0 && cadr(sampleXY) >= 150.0 && cadr(sampleXY) <= 31800.0) ||
+                      (car(sampleXY) >= 16000.0 && car(sampleXY) <= 30200.0 && cadr(sampleXY) >= -31800.0 && cadr(sampleXY) <= -150.0) ||
                       (car(sampleXY) >= -16350.0 && car(sampleXY) <= 16350.0 && cadr(sampleXY) >= 15900.0 && cadr(sampleXY) <= 33250.0) ||
                       (car(sampleXY) >= -46150.0 && car(sampleXY) <= -26700.0 && cadr(sampleXY) >= 22150.0 && cadr(sampleXY) <= 34750.0)
                     )

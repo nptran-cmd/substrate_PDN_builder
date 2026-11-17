@@ -1101,10 +1101,16 @@ def render_curved_recess_inspection_svg(
 # 5. CLI Entrypoint — Synthesize & Verify Real Non-Rectangular Curved Pockets
 # =============================================================================
 def run_curved_recess_demo_and_audit(ws_root: Optional[Path] = None) -> Dict[str, object]:
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_output_dir, resolve_stage1_inputs_dir
+    except ImportError:
+        from pdn_paths import resolve_output_dir, resolve_stage1_inputs_dir  # type: ignore
+
     ws = ws_root or Path(__file__).resolve().parents[2]
-    s1 = ws / "agent04_pdn_architect" / "stage1_inputs"
-    out_svg = ws / "agent04_pdn_architect" / "pdn_sandbox" / "mockup_BASE_Curved_Recess_NonRect_LSC_Placement.svg"
-    out_rep = ws / "agent04_pdn_architect" / "reports" / "curved_recess_lsc"
+    s1 = (ws_root / "agent04_pdn_architect" / "stage1_inputs") if ws_root is not None else resolve_stage1_inputs_dir()
+    out_svg = resolve_output_dir("agent04_pdn_architect/pdn_sandbox", explicit_work_dir=ws_root) / "mockup_BASE_Curved_Recess_NonRect_LSC_Placement.svg"
+    out_rep = resolve_output_dir("agent04_pdn_architect/reports/curved_recess_lsc", explicit_work_dir=ws_root)
+    out_svg.parent.mkdir(parents=True, exist_ok=True)
     out_rep.mkdir(parents=True, exist_ok=True)
 
     with (s1 / "bga_map.csv").open("r", encoding="utf-8") as fh:
@@ -1250,10 +1256,16 @@ def synthesize_all_3_tasks_curved_recess_and_lscs(ws_root: Optional[Path] = None
       - Task 2 (`vddc_vddram_routing_flow`): `U9` (`VDDC0 + VDD_0P8_SRAM_CC0` — All 6 Pockets incl. Inverted-T & Co-Pockets)
       - Task 3 (`hbm_vdd_routing_flow`)    : `U13` (`HBM4E MEM5` — Staggered Pocket A `VDDC+VDDQ` & NE Pocket B `VDDQL5`)
     """
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_output_dir, resolve_stage1_inputs_dir
+    except ImportError:
+        from pdn_paths import resolve_output_dir, resolve_stage1_inputs_dir  # type: ignore
+
     ws = ws_root or Path(__file__).resolve().parents[2]
-    s1 = ws / "agent04_pdn_architect" / "stage1_inputs"
-    svg_dir = ws / "agent04_pdn_architect" / "pdn_sandbox"
-    rep_dir = ws / "agent04_pdn_architect" / "reports" / "curved_recess_lsc"
+    s1 = (ws_root / "agent04_pdn_architect" / "stage1_inputs") if ws_root is not None else resolve_stage1_inputs_dir()
+    svg_dir = resolve_output_dir("agent04_pdn_architect/pdn_sandbox", explicit_work_dir=ws_root)
+    rep_dir = resolve_output_dir("agent04_pdn_architect/reports/curved_recess_lsc", explicit_work_dir=ws_root)
+    svg_dir.mkdir(parents=True, exist_ok=True)
     rep_dir.mkdir(parents=True, exist_ok=True)
 
     with (s1 / "bga_map.csv").open("r", encoding="utf-8") as fh:

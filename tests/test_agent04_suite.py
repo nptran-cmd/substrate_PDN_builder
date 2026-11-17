@@ -176,14 +176,31 @@ class TestAgent04PDNArchitect(unittest.TestCase):
                     stack_mode="1_OR_2_STACK_BY_LAYER_NET",
                 )
                 self.assertEqual(pl["pattern"], pat)
+                self.assertFalse(pl["capped_to_pkg08_ceiling"])
                 self.assertTrue(pl["pitch_solver"]["drc_pitch_pass"])
                 self.assertGreaterEqual(pl["pitch_solver"]["same_net_pitch_um"], 270.0)
                 self.assertGreaterEqual(pl["pitch_solver"]["diff_net_pitch_um"], 432.5)
                 self.assertTrue(pl["drc_verification"]["Zero_DRC_Violations"])
                 self.assertEqual(pl["pths_inside_edtc_koz"], 0)
+                self.assertGreaterEqual(pl["min_pth_inner_pad_to_guard_metal_um"], 67.5)
                 self.assertGreater(pl["edtc_koz_excluded_sites"], 200)
                 self.assertEqual(pl["vdd_pp_stack_depth"], {"top_above_core": 1, "bot_below_core": 2})
                 self.assertEqual(pl["vss_pp_stack_depth"], {"top_above_core": 2, "bot_below_core": 1})
+
+            pl_cap = synthesize_pth_4fco_to_4bco(
+                target_density_per_mm2=10.0,
+                pattern=pat,
+                stack_mode="1_OR_2_STACK_BY_LAYER_NET",
+            )
+            self.assertTrue(pl_cap["capped_to_pkg08_ceiling"])
+            exp_cap = 9.014 if pat == "STAGGERED" else 8.564
+            self.assertAlmostEqual(pl_cap["target_density_per_mm2"], exp_cap, delta=0.02)
+            self.assertTrue(pl_cap["pitch_solver"]["drc_pitch_pass"])
+            self.assertGreaterEqual(pl_cap["pitch_solver"]["same_net_pitch_um"], 270.0)
+            self.assertGreaterEqual(pl_cap["pitch_solver"]["diff_net_pitch_um"], 432.5)
+            self.assertTrue(pl_cap["drc_verification"]["Zero_DRC_Violations"])
+            self.assertEqual(pl_cap["pths_inside_edtc_koz"], 0)
+            self.assertGreaterEqual(pl_cap["min_pth_inner_pad_to_guard_metal_um"], 67.5)
 
         il_path = self.out_dir / "scripts" / "pth_4fco_4bco_router_batch.il"
         skill_md = self.out_dir / "skills" / "pth_4fco_4bco_routing" / "SKILL.md"

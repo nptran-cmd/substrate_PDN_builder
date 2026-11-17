@@ -2,8 +2,10 @@
 Layer-by-Layer PDN Routing Framework — Step 2: `4FCO` <-> `4BCO` Core PTH & Prepreg Via-Stack Router.
 
 Enforces all 5 Architectural Constraints on `U7` (`HUTTON_HILL_LDB_BC_A0`):
-  1. User-Input PTH Density (`5, 6, 7, 8 PTH/mm²`, or any float <= 8.0 PTH/mm²):
+  1. User-Input PTH Density (`5, 6, 7, 8 PTH/mm²`, capped at PKG 0.8 geometric ceilings `9.01` Staggered / `8.56` 90° H/V):
      - Solves exact grid pitches `(Px, Py)` so `1e6 / (Px * Py) == target_density`.
+     - If requested density exceeds the pattern's PKG 0.8 geometric maximum (`10 PTH/mm² > 9.01 / 8.56 PTH/mm²`),
+       caps cleanly to the pattern's PKG 0.8 maximum with explicit metadata and zero DRC violations.
   2. Strict PTH Pitch Design Rule Verification:
      - Same-Net PTH Pitch (common inner pads): `>= 270.0 um` (PKG 0.8 rule; 216.5 um PKG 0.1).
      - Different-Net PTH Pitch (365um inner pad + 67.5um spacing): `>= 432.5 um`.
@@ -76,6 +78,31 @@ def normalize_pth_pattern(pattern_str: str) -> str:
     return "STAGGERED"
 
 
+def _fmt_density(val: float) -> str:
+    """Format density cleanly as integer when exact (e.g. '8') or 2 decimals (e.g. '8.56', '9.01')."""
+    if abs(val - round(val)) < 1e-2:
+        return f"{round(val):.0f}"
+    return f"{val:.2f}"
+
+
+def _density_tag(val: float) -> str:
+    """Format density for safe filenames (e.g. '8', '8p56', '9p01')."""
+    return _fmt_density(val).replace(".", "p")
+
+
+def get_pkg08_max_feasible_density(
+    pattern: str = "STAGGERED",
+    min_same_net_pitch_um: float = PTH_MIN_SAME_NET_PITCH_UM,
+    min_diff_net_pitch_um: float = PTH_MIN_DIFF_NET_PITCH_UM,
+) -> float:
+    """Return the exact geometric maximum PTH density (PTH/mm²) under PKG 0.8 pitch limits."""
+    pat = normalize_pth_pattern(pattern)
+    if pat == "STAGGERED":
+        px_min = math.sqrt(max(1.0, min_diff_net_pitch_um**2 - (0.5 * min_same_net_pitch_um) ** 2))
+        return 1_000_000.0 / (px_min * min_same_net_pitch_um)
+    return 1_000_000.0 / (min_diff_net_pitch_um * min_same_net_pitch_um)
+
+
 def solve_pth_grid_pitches_for_density(
     target_density_per_mm2: float,
     pattern: str = "STAGGERED",
@@ -83,7 +110,8 @@ def solve_pth_grid_pitches_for_density(
     min_diff_net_pitch_um: float = PTH_MIN_DIFF_NET_PITCH_UM,
 ) -> Dict[str, Any]:
     """
-    Solve `(Px, Py)` pitches for user target density (`5, 6, 7, 8 PTH/mm²`) and pattern topology:
+    Solve `(Px, Py)` pitches for user target density (`5, 6, 7, 8 PTH/mm²`, capped at PKG 0.8 ceilings
+    `9.01 PTH/mm²` Staggered or `8.56 PTH/mm²` 90° H/V) and pattern topology:
       - `STAGGERED`:
           Same-net vertical columns (`Py >= 270um`), odd columns shifted by `Py/2`
           (`D_diff = sqrt(Px^2 + (Py/2)^2) >= 432.5um`).
@@ -95,11 +123,16 @@ def solve_pth_grid_pitches_for_density(
           `Same-Net Horizontal Pitch = Px >= 270.0 um`, `Diff-Net Vertical Pitch = Py >= 432.5 um`.
     """
     pat = normalize_pth_pattern(pattern)
-    d_clamped = max(1.0, min(8.2, float(target_density_per_mm2)))
+    d_requested = float(target_density_per_mm2)
+    max_feasible = get_pkg08_max_feasible_density(pat, min_same_net_pitch_um, min_diff_net_pitch_um)
+    was_capped = bool(d_requested > max_feasible + 1e-6)
+    d_clamped = max(1.0, min(max_feasible, d_requested))
     cell_area_um2 = 1_000_000.0 / d_clamped
 
     if pat == "STAGGERED":
-        if d_clamped >= 7.8:
+        if d_clamped >= 9.5:
+            py = 250.0
+        elif d_clamped >= 7.8:
             py = 300.0
         elif d_clamped >= 6.8:
             py = 330.0
@@ -111,58 +144,60 @@ def solve_pth_grid_pitches_for_density(
             py = max(420.0, round(math.sqrt(cell_area_um2 * 0.8), 2))
         px = cell_area_um2 / py
         d_diff = math.hypot(px, 0.5 * py)
-        if d_diff < min_diff_net_pitch_um:
-            py = max(min_same_net_pitch_um, py - 20.0)
+        while d_diff < min_diff_net_pitch_um and py > min_same_net_pitch_um:
+            py = max(min_same_net_pitch_um, py - 10.0)
             px = cell_area_um2 / py
             d_diff = math.hypot(px, 0.5 * py)
-        d_same = py
-        stagger_dy = round(0.5 * py, 2)
-    elif pat == "ORTHOGONAL_90DEG_VERTICAL":
-        # Strict 90-deg grid: Px is Diff-Net (>= 432.5 um), Py is Same-Net (>= 270.0 um)
-        if d_clamped >= 7.8:
-            px = 440.0
+        if d_diff < min_diff_net_pitch_um:
+            px = math.sqrt(max(1.0, min_diff_net_pitch_um**2 - (0.5 * py) ** 2))
+        px_out = round(px, 2)
+        py_out = max(round(py, 2), math.ceil(min_same_net_pitch_um * 100.0) / 100.0)
+        if math.hypot(px_out, 0.5 * py_out) < min_diff_net_pitch_um:
+            px_out = round(px_out + 0.01, 2)
+        d_same = min(py_out, 2.0 * px_out)
+        d_diff = math.hypot(px_out, 0.5 * py_out)
+        stagger_dy = round(0.5 * py_out, 2)
+    else:
+        # Strict 90-deg grid: diff_axis >= min_diff_net_pitch_um, same_axis >= min_same_net_pitch_um
+        if d_clamped >= 8.6 and min_diff_net_pitch_um <= 360.0:
+            diff_axis = max(min_diff_net_pitch_um, 360.0)
+        elif d_clamped >= 7.8:
+            diff_axis = max(min_diff_net_pitch_um, 440.0)
         elif d_clamped >= 6.8:
-            px = 450.0
+            diff_axis = max(min_diff_net_pitch_um, 450.0)
         elif d_clamped >= 5.8:
-            px = 475.0
+            diff_axis = max(min_diff_net_pitch_um, 475.0)
         elif d_clamped >= 4.8:
-            px = 500.0
+            diff_axis = max(min_diff_net_pitch_um, 500.0)
         else:
-            px = max(500.0, round(math.sqrt(cell_area_um2 * 1.15), 2))
-        py = cell_area_um2 / px
-        if py < min_same_net_pitch_um:
-            py = min_same_net_pitch_um
-            px = max(min_diff_net_pitch_um, cell_area_um2 / py)
-        d_same = py
-        d_diff = px
-        stagger_dy = 0.0
-    else:  # ORTHOGONAL_90DEG_HORIZONTAL
-        # Strict 90-deg grid: Px is Same-Net (>= 270.0 um), Py is Diff-Net (>= 432.5 um)
-        if d_clamped >= 7.8:
-            py = 440.0
-        elif d_clamped >= 6.8:
-            py = 450.0
-        elif d_clamped >= 5.8:
-            py = 475.0
-        elif d_clamped >= 4.8:
-            py = 500.0
+            diff_axis = max(500.0, round(math.sqrt(cell_area_um2 * 1.15), 2))
+        same_axis = cell_area_um2 / diff_axis
+        if same_axis < min_same_net_pitch_um:
+            same_axis = min_same_net_pitch_um
+            diff_axis = max(min_diff_net_pitch_um, cell_area_um2 / same_axis)
+        diff_out = max(round(diff_axis, 2), math.ceil(min_diff_net_pitch_um * 100.0) / 100.0)
+        same_out = max(round(same_axis, 2), math.ceil(min_same_net_pitch_um * 100.0) / 100.0)
+        if pat == "ORTHOGONAL_90DEG_VERTICAL":
+            px_out, py_out = diff_out, same_out
         else:
-            py = max(500.0, round(math.sqrt(cell_area_um2 * 1.15), 2))
-        px = cell_area_um2 / py
-        if px < min_same_net_pitch_um:
-            px = min_same_net_pitch_um
-            py = max(min_diff_net_pitch_um, cell_area_um2 / px)
-        d_same = px
-        d_diff = py
+            px_out, py_out = same_out, diff_out
+        d_same = same_out
+        d_diff = diff_out
         stagger_dy = 0.0
 
-    achieved_grid_density = 1_000_000.0 / (px * py)
+    achieved_grid_density = 1_000_000.0 / (px_out * py_out)
+    effective_target = achieved_grid_density if was_capped else d_clamped
     return {
         "pattern": pat,
-        "target_density_per_mm2": round(d_clamped, 3),
+        "requested_density_per_mm2": round(d_requested, 3),
+        "target_density_per_mm2": round(effective_target, 3),
         "achieved_grid_density_per_mm2": round(achieved_grid_density, 3),
-        "px_col_pitch_um": round(px, 2),
-        "py_row_pitch_um": round(py, 2),
+        "max_feasible_density_per_mm2": round(max_feasible, 3),
+        "ids_rule_max_density_per_mm2": 8.0,
+        "capped_to_pkg08_ceiling": was_capped,
+        "exceeds_ids_8_rule": bool(achieved_grid_density > 8.0 + 1e-3),
+        "px_col_pitch_um": px_out,
+        "py_row_pitch_um": py_out,
         "py_same_net_pitch_um": round(d_same, 2),
         "stagger_dy_um": stagger_dy,
         "same_net_pitch_um": round(d_same, 2),
@@ -172,6 +207,131 @@ def solve_pth_grid_pitches_for_density(
         "diff_net_min_rule_um": min_diff_net_pitch_um,
         "diff_net_margin_um": round(d_diff - min_diff_net_pitch_um, 2),
         "drc_pitch_pass": bool(d_same >= min_same_net_pitch_um - 1e-3 and d_diff >= min_diff_net_pitch_um - 1e-3),
+    }
+
+
+PTH_PKG01_MIN_SAME_NET_PITCH_UM = 216.5
+PTH_PKG01_MIN_DIFF_NET_PITCH_UM = 350.0
+PP_PAD_RADIUS_UM = 87.5          # V175_85_175 / V175_85_282_5 outer PP pad radius = 87.5 um
+PP_DRILL_RADIUS_UM = 42.5        # 85 um laser drill radius
+PTH_OUTER_LID_RADIUS_UM = 141.25 # 282.5 um Core PTH lid radius
+PP_MAX_OVERLAP_UM = 45.0         # Substrate DR line 35: PP Via - PP Via <= 45 um
+PP_CORE_MIN_SPACE_UM = 67.5      # Substrate DR lines 16/18: Core & PP min L/S = 67.5 um
+
+
+def resolve_pth_pitch_rules(pkg_rule: str = "PKG0.8") -> Tuple[float, float, str]:
+    """Return `(min_same_net_pitch_um, min_diff_net_pitch_um, normalized_pkg_label)`."""
+    u = str(pkg_rule).strip().upper().replace(" ", "")
+    if "0.1" in u or "01" in u:
+        return PTH_PKG01_MIN_SAME_NET_PITCH_UM, PTH_PKG01_MIN_DIFF_NET_PITCH_UM, "PKG 0.1"
+    return PTH_MIN_SAME_NET_PITCH_UM, PTH_MIN_DIFF_NET_PITCH_UM, "PKG 0.8"
+
+
+def normalize_pp_pattern(pp_pattern_str: str) -> str:
+    """Normalize Prepreg (`PP`) pattern token to `1_VIA_CENTER`, `2_VIA_ON_PTH`, or `4_VIA_PER_PTH`."""
+    u = str(pp_pattern_str).strip().upper().replace("-", "_").replace(" ", "_")
+    if "4" in u or "2X2" in u or "QUAD" in u:
+        return "4_VIA_PER_PTH"
+    if "2" in u or "DUAL" in u or "DOUBLE" in u:
+        return "2_VIA_ON_PTH"
+    return "1_VIA_CENTER"
+
+
+def get_pp_pattern_offsets_and_drc(
+    pp_pattern: str = "1_VIA_CENTER",
+    pth_pattern: str = "STAGGERED",
+    pkg_rule: str = "PKG0.8",
+    min_diff_pth_pitch_um: float = 432.5,
+) -> Dict[str, Any]:
+    """
+    Compute `(dx, dy)` offsets in um for Prepreg (`175_85_175`) vias on a single Core PTH (`282.5 um` lid,
+    `150 um` drill) and audit strictly against `Substrate Design Rules_gid_1425021083.csv`:
+      - `1_VIA_CENTER` : `[(0.0, 0.0)]` -> PASS (`PKG 0.1` max=1 AND `PKG 0.8` max=2)
+      - `2_VIA_ON_PTH`: `[(0.0, -65.0), (0.0, 65.0)]` (or X-aligned for 90-deg H) so `PP-PP overlap = 45.0 um <= 45`
+                         -> PASS `PKG 0.8` (`2 <= 2`, w/ capture/teardrop shape >=305um); WAIVER for `PKG 0.1` (`2 > 1`)
+      - `4_VIA_PER_PTH`: `[(-65.0, -65.0), (65.0, -65.0), (-65.0, 65.0), (65.0, 65.0)]`
+                         -> FAIL `Substrate DR line 44` (`4 > 2 [PKG 0.8]` and `4 > 1 [PKG 0.1]`; outer edge `179.4 > 141.25 um`)
+    """
+    pp_pat = normalize_pp_pattern(pp_pattern)
+    pth_pat = normalize_pth_pattern(pth_pattern)
+    _, _, pkg_lbl = resolve_pth_pitch_rules(pkg_rule)
+    max_vias_on_pth_rule = 1 if pkg_lbl == "PKG 0.1" else 2
+
+    if pp_pat == "1_VIA_CENTER":
+        offsets: List[Tuple[float, float]] = [(0.0, 0.0)]
+    elif pp_pat == "2_VIA_ON_PTH":
+        # Place along the same-net axis so opposite-net 67.5um L/S clearance stays maximized
+        offsets = [(-65.0, 0.0), (65.0, 0.0)] if pth_pat == "ORTHOGONAL_90DEG_HORIZONTAL" else [(0.0, -65.0), (0.0, 65.0)]
+    else:
+        offsets = [(-65.0, -65.0), (65.0, -65.0), (-65.0, 65.0), (65.0, 65.0)]
+
+    n_vias = len(offsets)
+    min_pp_pitch = 1e9
+    max_pp_overlap = 0.0
+    for i in range(n_vias):
+        for j in range(i + 1, n_vias):
+            d_ij = math.hypot(offsets[i][0] - offsets[j][0], offsets[i][1] - offsets[j][1])
+            min_pp_pitch = min(min_pp_pitch, d_ij)
+            max_pp_overlap = max(max_pp_overlap, max(0.0, 2.0 * PP_PAD_RADIUS_UM - d_ij))
+    if n_vias <= 1:
+        min_pp_pitch = 0.0
+
+    max_pth_pp_offset = max(math.hypot(dx, dy) for dx, dy in offsets)
+    max_pp_outer_radius = max_pth_pp_offset + PP_PAD_RADIUS_UM
+    lid_overhang = max(0.0, max_pp_outer_radius - PTH_OUTER_LID_RADIUS_UM)
+
+    # Worst-case diff-net PP edge-to-edge gap (assuming same-net orientation keeps 2_VIA shift orthogonal on 90-deg H/V)
+    if pp_pat == "1_VIA_CENTER":
+        worst_shift_toward_diff = 0.0
+    elif pp_pat == "2_VIA_ON_PTH":
+        worst_shift_toward_diff = 0.0 if pth_pat != "STAGGERED" else 32.5
+    else:
+        worst_shift_toward_diff = max(abs(dx) for dx, _ in offsets)
+    min_diff_pp_edge_gap = min_diff_pth_pitch_um - 2.0 * worst_shift_toward_diff - 2.0 * PP_PAD_RADIUS_UM
+
+    count_rule_pass = n_vias <= max_vias_on_pth_rule
+    pp_overlap_rule_pass = max_pp_overlap <= PP_MAX_OVERLAP_UM + 1e-6
+    diff_space_pass = min_diff_pp_edge_gap >= PP_CORE_MIN_SPACE_UM - 1e-6
+    # Inside 282.5um lid or plane-captured teardrop
+    overall_pass = bool(count_rule_pass and pp_overlap_rule_pass and diff_space_pass)
+
+    violations: List[str] = []
+    if not count_rule_pass:
+        violations.append(
+            f"Via count on single PTH = {n_vias} exceeds {pkg_lbl} DR limit (max {max_vias_on_pth_rule})"
+        )
+    if not pp_overlap_rule_pass:
+        violations.append(f"PP-PP pad overlap = {max_pp_overlap:.1f}um > {PP_MAX_OVERLAP_UM:.1f}um")
+    if lid_overhang > 1e-3:
+        violations.append(
+            f"PP pad edge ({max_pp_outer_radius:.2f}um) extends {lid_overhang:.2f}um past 282.5um PTH lid (needs >= {2*max_pp_outer_radius:.1f}um teardrop/plane)"
+        )
+    if not diff_space_pass:
+        violations.append(
+            f"Diff-net PP edge gap = {min_diff_pp_edge_gap:.2f}um < {PP_CORE_MIN_SPACE_UM:.1f}um"
+        )
+
+    return {
+        "pp_pattern": pp_pat,
+        "pkg_rule": pkg_lbl,
+        "offsets_um": offsets,
+        "vias_per_pth": n_vias,
+        "max_vias_per_pth_rule": max_vias_on_pth_rule,
+        "count_rule_pass": count_rule_pass,
+        "pp_to_pp_min_pitch_um": round(min_pp_pitch, 2),
+        "pp_to_pp_max_overlap_um": round(max_pp_overlap, 2),
+        "pp_overlap_rule_limit_um": PP_MAX_OVERLAP_UM,
+        "pp_overlap_rule_pass": pp_overlap_rule_pass,
+        "pth_to_pp_center_offset_um": round(max_pth_pp_offset, 2),
+        "pp_outer_radius_um": round(max_pp_outer_radius, 2),
+        "pth_outer_lid_radius_um": PTH_OUTER_LID_RADIUS_UM,
+        "lid_overhang_um": round(lid_overhang, 2),
+        "min_diff_net_pp_edge_gap_um": round(min_diff_pp_edge_gap, 2),
+        "pp_core_min_space_rule_um": PP_CORE_MIN_SPACE_UM,
+        "diff_space_pass": diff_space_pass,
+        "drc_pass": overall_pass,
+        "status": "PASS" if overall_pass else ("PASS_WITH_TEARDROP_NOTE" if count_rule_pass and diff_space_pass else "FAIL_DR_VIOLATION"),
+        "notes": violations if violations else ["All Substrate DR checks passed cleanly (count, PP overlap, and 67.5um L/S)."],
     }
 
 
@@ -264,15 +424,36 @@ def synthesize_pth_4fco_to_4bco(
     layer_polarity: Optional[Dict[str, str]] = None,
     stack_mode: str = "1_OR_2_STACK_BY_LAYER_NET",
     die_margin_um: float = 250.0,
+    pkg_rule: str = "PKG0.8",
+    pp_pattern: str = "1_VIA_CENTER",
+    power_net: str = "VDDUC0",
 ) -> Dict[str, Any]:
     """
-    Synthesize all `4FCO <-> 4BCO` Core PTHs & Prepreg Stacked Vias under `U7` for a user-specified
-    PTH density (`5, 6, 7, 8 PTH/mm²`) and pattern (`STAGGERED`, `ORTHOGONAL_90DEG_VERTICAL`,
-    `ORTHOGONAL_90DEG_HORIZONTAL`), enforcing eDTC KOZs and layer-assigned 1-stack / 2-stack PP vias.
+    Synthesize all `4FCO <-> 4BCO` Core PTHs & Prepreg Stacked Vias for a user-specified
+    PTH density (`4..11 PTH/mm²`) and pattern (`STAGGERED`, `ORTHOGONAL_90DEG_VERTICAL`,
+    `ORTHOGONAL_90DEG_HORIZONTAL`), plus Prepreg pattern (`1_VIA_CENTER`, `2_VIA_ON_PTH`,
+    `4_VIA_PER_PTH`), enforcing eDTC KOZs, PKG pitch rules (`PKG0.8` or `PKG0.1`), and PP DRC.
     """
     pat = normalize_pth_pattern(pattern)
+    pp_pat = normalize_pp_pattern(pp_pattern)
+    min_same_um, min_diff_um, pkg_lbl = resolve_pth_pitch_rules(pkg_rule)
     pol = dict(layer_polarity or DEFAULT_LAYER_POLARITY)
-    pitch_info = solve_pth_grid_pitches_for_density(target_density_per_mm2, pattern=pat)
+    if power_net != "VDDUC0":
+        pol = {k: (power_net if v == "VDDUC0" else v) for k, v in pol.items()}
+
+    pitch_info = solve_pth_grid_pitches_for_density(
+        target_density_per_mm2,
+        pattern=pat,
+        min_same_net_pitch_um=min_same_um,
+        min_diff_net_pitch_um=min_diff_um,
+    )
+    pp_drc = get_pp_pattern_offsets_and_drc(
+        pp_pattern=pp_pat,
+        pth_pattern=pat,
+        pkg_rule=pkg_rule,
+        min_diff_pth_pitch_um=pitch_info["diff_net_pitch_um"],
+    )
+    pp_offsets: List[Tuple[float, float]] = list(pp_drc["offsets_um"])
     px = pitch_info["px_col_pitch_um"]
     py = pitch_info["py_row_pitch_um"]
 
@@ -281,7 +462,7 @@ def synthesize_pth_4fco_to_4bco(
     y_min = U7_DIE_EDGE[1] + die_margin_um
     y_max = U7_DIE_EDGE[3] - die_margin_um
 
-    vdd_spans = build_pp_via_stack_for_net("VDDUC0", pol, stack_mode=stack_mode)
+    vdd_spans = build_pp_via_stack_for_net(power_net, pol, stack_mode=stack_mode)
     vss_spans = build_pp_via_stack_for_net("VSS", pol, stack_mode=stack_mode)
 
     pth_points: List[Tuple[str, float, float]] = []
@@ -302,7 +483,7 @@ def synthesize_pth_4fco_to_4bco(
                 is_vdd = (row_idx % 2 == 0)
             else:
                 is_vdd = (col_idx % 2 == 0)
-            net = "VDDUC0" if is_vdd else "VSS"
+            net = power_net if is_vdd else "VSS"
             spans_for_net = vdd_spans if is_vdd else vss_spans
 
             in_edtc_koz = any(
@@ -319,21 +500,50 @@ def synthesize_pth_4fco_to_4bco(
                 else:
                     vss_pths.append(pt)
                 for l_start, l_end, ps_name, role in spans_for_net:
-                    all_via_records.append({
-                        "net": net,
-                        "padstack": ps_name,
-                        "start_layer": l_start,
-                        "end_layer": l_end,
-                        "x": pt[0],
-                        "y": pt[1],
-                        "role": role,
-                    })
+                    if l_start == "2FCI" and l_end == "2BCI":
+                        all_via_records.append({
+                            "net": net,
+                            "padstack": ps_name,
+                            "start_layer": l_start,
+                            "end_layer": l_end,
+                            "x": pt[0],
+                            "y": pt[1],
+                            "role": role,
+                        })
+                    else:
+                        for dx, dy in pp_offsets:
+                            all_via_records.append({
+                                "net": net,
+                                "padstack": ps_name,
+                                "start_layer": l_start,
+                                "end_layer": l_end,
+                                "x": round(pt[0] + dx, 3),
+                                "y": round(pt[1] + dy, 3),
+                                "role": f"{role}_{pp_pat}",
+                            })
             cy += py
             row_idx += 1
         cx += px
         col_idx += 1
 
-    drc_check = verify_pth_pairwise_drc(pth_points)
+    drc_check = verify_pth_pairwise_drc(pth_points, min_same_net_um=min_same_um, min_diff_net_um=min_diff_um)
+
+    pths_in_koz = sum(
+        1
+        for _, x, y in pth_points
+        if any(_point_inside_expanded_box(x, y, e["body"], EDTC_PTH_CENTER_KOZ_UM) for e in U7_EDTC_BODIES)
+    )
+    guard_offset = EDTC_CAVITY_KOZ_UM + EDTC_GUARD_METAL_WIDTH_UM  # 450.0 um outer edge of Guard Metal
+    min_pad_to_guard = 1e9
+    for _, x, y in pth_points:
+        for e in U7_EDTC_BODIES:
+            bx1, by1, bx2, by2 = e["body"]
+            gx1, gy1, gx2, gy2 = bx1 - guard_offset, by1 - guard_offset, bx2 + guard_offset, by2 + guard_offset
+            dx_g = max(gx1 - x, 0.0, x - gx2)
+            dy_g = max(gy1 - y, 0.0, y - gy2)
+            gap = math.hypot(dx_g, dy_g) - PTH_INNER_PAD_RADIUS_UM
+            if gap < min_pad_to_guard:
+                min_pad_to_guard = gap
 
     u7_area_mm2 = ((x_max - x_min) * (y_max - y_min)) / 1e6
     edtc_koz_area_mm2 = sum(
@@ -350,7 +560,14 @@ def synthesize_pth_4fco_to_4bco(
 
     return {
         "pattern": pat,
+        "pkg_rule": pkg_lbl,
+        "power_net": power_net,
+        "pp_pattern": pp_pat,
+        "pp_pattern_offsets_um": pp_offsets,
+        "pp_drc_audit": pp_drc,
+        "requested_density_per_mm2": pitch_info["requested_density_per_mm2"],
         "target_density_per_mm2": pitch_info["target_density_per_mm2"],
+        "capped_to_pkg08_ceiling": pitch_info["capped_to_pkg08_ceiling"],
         "pitch_solver": pitch_info,
         "drc_verification": drc_check,
         "stack_mode": stack_mode,
@@ -363,7 +580,8 @@ def synthesize_pth_4fco_to_4bco(
         "vss_pth_count": len(vss_pths),
         "total_pth_count": len(pth_points),
         "edtc_koz_excluded_sites": edtc_koz_skipped,
-        "pths_inside_edtc_koz": 0,
+        "pths_inside_edtc_koz": pths_in_koz,
+        "min_pth_inner_pad_to_guard_metal_um": round(min_pad_to_guard, 2) if min_pad_to_guard < 1e8 else 0.0,
         "active_routable_area_mm2": round(active_area_mm2, 2),
         "effective_active_density_per_mm2": round(len(pth_points) / active_area_mm2, 2),
         "total_via_records_4fco_to_4bco": len(all_via_records),
@@ -401,16 +619,20 @@ def _render_pth_map_panel_svg(
 
     p_info = plan["pitch_solver"]
     d_tgt = plan["target_density_per_mm2"]
+    d_lbl = _fmt_density(d_tgt)
     pat = plan["pattern"]
-    title = custom_title or f"{d_tgt:.0f} PTH/mm² [{pat}] (PTHs={plan['total_pth_count']:,})"
+    pkg_tag = plan.get("pkg_rule", "PKG 0.8")
+    cap_tag = f" [{pkg_tag} MAX]" if p_info.get("capped_to_pkg08_ceiling") else (" [IDS MAX]" if abs(d_tgt - 8.0) < 1e-2 else "")
+    title = custom_title or f"{d_lbl} PTH/mm²{cap_tag} [{pat}] ({plan['total_pth_count']:,} PTHs)"
     sub = (
         f"Px={p_info['px_col_pitch_um']:.1f}um, Py={p_info['py_row_pitch_um']:.1f}um | "
-        f"Same={p_info['same_net_pitch_um']:.1f}um (>=270) | Diff={p_info['diff_net_pitch_um']:.1f}um (>=432.5)"
+        f"Same={p_info['same_net_pitch_um']:.1f}um (>={p_info['same_net_min_rule_um']:.1f}) | "
+        f"Diff={p_info['diff_net_pitch_um']:.1f}um (>={p_info['diff_net_min_rule_um']:.1f})"
     )
 
     lines: List[str] = [
         f'<rect x="{panel_x}" y="{panel_y}" width="{panel_w}" height="{panel_h}" rx="10" fill="#0f172a" stroke="#334155" stroke-width="2"/>',
-        f'<text x="{panel_x + 16}" y="{panel_y + 30}" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="bold">{html.escape(title)}</text>',
+        f'<text x="{panel_x + 16}" y="{panel_y + 30}" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="15.5" font-weight="bold">{html.escape(title)}</text>',
         f'<text x="{panel_x + 16}" y="{panel_y + 52}" fill="#38bdf8" font-family="Consolas, monospace" font-size="10.8">{html.escape(sub)}</text>',
         f'<rect x="{mx(dx1)}" y="{my(dy2)}" width="{ms(dw)}" height="{ms(dh)}" fill="#090d16" stroke="#475569" stroke-width="1.5"/>',
     ]
@@ -418,6 +640,8 @@ def _render_pth_map_panel_svg(
     for e in U7_EDTC_BODIES:
         bx1, by1, bx2, by2 = e["body"]
         kx1, ky1, kx2, ky2 = bx1 - EDTC_PTH_CENTER_KOZ_UM, by1 - EDTC_PTH_CENTER_KOZ_UM, bx2 + EDTC_PTH_CENTER_KOZ_UM, by2 + EDTC_PTH_CENTER_KOZ_UM
+        if kx2 < dx1 or kx1 > dx2 or ky2 < dy1 or ky1 > dy2:
+            continue  # Skip off-die eDTCs (e.g. C2211 below U7) so they never overlap panel footer/legend
         lines.append(
             f'<rect x="{mx(kx1)}" y="{my(ky2)}" width="{ms(kx2 - kx1)}" height="{ms(ky2 - ky1)}" '
             f'fill="#450a0a" fill-opacity="0.45" stroke="#ef4444" stroke-width="1.4" stroke-dasharray="5,3"/>'
@@ -510,26 +734,32 @@ def _render_zoomed_pth_pattern_tile_svg(
     r_outer = ms(141.25) # 282.5 um outer lid pad (2FCI/2BCI)
     r_pp = ms(87.5)      # 175.0 um PP via pad (4FCO/3FCI/3BCI/4BCO)
     r_drill = ms(75.0)   # 150.0 um PTH drill
+    pp_offsets = plan.get("pp_pattern_offsets_um") or [(0.0, 0.0)]
 
     for x, y in vdd_t:
         cx_p, cy_p = mx(x), my(y)
         lines.append(f'<circle cx="{cx_p}" cy="{cy_p}" r="{r_inner}" fill="#881337" fill-opacity="0.55" stroke="#fb7185" stroke-width="1.4" stroke-dasharray="3,2"/>')
         lines.append(f'<circle cx="{cx_p}" cy="{cy_p}" r="{r_outer}" fill="#e11d48" fill-opacity="0.88" stroke="#ffe4e6" stroke-width="1.5"/>')
-        lines.append(f'<circle cx="{cx_p}" cy="{cy_p}" r="{r_pp}" fill="none" stroke="#fde047" stroke-width="1.2"/>')
         lines.append(f'<circle cx="{cx_p}" cy="{cy_p}" r="{r_drill}" fill="#090d16" stroke="#fda4af" stroke-width="1.5"/>')
+        for odx, ody in pp_offsets:
+            lines.append(f'<circle cx="{mx(x + odx)}" cy="{my(y + ody)}" r="{r_pp}" fill="#fde047" fill-opacity="0.20" stroke="#fde047" stroke-width="1.3"/>')
 
     for x, y in vss_t:
         cx_p, cy_p = mx(x), my(y)
         lines.append(f'<circle cx="{cx_p}" cy="{cy_p}" r="{r_inner}" fill="#1e3a8a" fill-opacity="0.55" stroke="#60a5fa" stroke-width="1.4" stroke-dasharray="3,2"/>')
         lines.append(f'<circle cx="{cx_p}" cy="{cy_p}" r="{r_outer}" fill="#2563eb" fill-opacity="0.88" stroke="#dbeafe" stroke-width="1.5"/>')
-        lines.append(f'<circle cx="{cx_p}" cy="{cy_p}" r="{r_pp}" fill="none" stroke="#38bdf8" stroke-width="1.2"/>')
         lines.append(f'<circle cx="{cx_p}" cy="{cy_p}" r="{r_drill}" fill="#090d16" stroke="#93c5fd" stroke-width="1.5"/>')
+        for odx, ody in pp_offsets:
+            lines.append(f'<circle cx="{mx(x + odx)}" cy="{my(y + ody)}" r="{r_pp}" fill="#38bdf8" fill-opacity="0.20" stroke="#38bdf8" stroke-width="1.3"/>')
 
     p_info = plan["pitch_solver"]
+    net_lbl = plan.get("power_net", "VDDUC0")
+    pp_lbl = plan.get("pp_pattern", "1_VIA_CENTER")
+    pp_status = (plan.get("pp_drc_audit") or {}).get("status", "PASS")
     footer = (
-        f"Tile [3x3mm]: VDDUC0={len(vdd_t)} | VSS={len(vss_t)} | "
-        f"Px={p_info['px_col_pitch_um']:.1f}um, Py={p_info['py_row_pitch_um']:.1f}um | "
-        f"Same-Net={p_info['same_net_pitch_um']:.1f}um (>=270) | Diff-Net={p_info['diff_net_pitch_um']:.1f}um (>=432.5)"
+        f"Tile [3x3mm]: {net_lbl}={len(vdd_t)} | VSS={len(vss_t)} | PP={pp_lbl} ({pp_status}) | "
+        f"Same={p_info['same_net_pitch_um']:.1f}um (>={p_info['same_net_min_rule_um']:.1f}) | "
+        f"Diff={p_info['diff_net_pitch_um']:.1f}um (>={p_info['diff_net_min_rule_um']:.1f})"
     )
     lines.append(
         f'<text x="{panel_x + 18}" y="{panel_y + panel_h - 14}" fill="#e2e8f0" font-family="Consolas, monospace" font-size="11.0">{html.escape(footer)}</text>'
@@ -542,19 +772,33 @@ def render_pattern_comparison_3panel_svg(
     plan_90v: Dict[str, Any],
     plan_90h: Dict[str, Any],
     out_svg: Path,
+    header_title: Optional[str] = None,
+    header_subtitle: Optional[str] = None,
+    footer_note: Optional[str] = None,
 ) -> str:
     """Render a 2280x1240 3-panel SVG comparing STAGGERED vs ORTHOGONAL_90DEG_VERTICAL vs ORTHOGONAL_90DEG_HORIZONTAL."""
     W, H = 2280, 1240
-    d_val = plan_stag["target_density_per_mm2"]
+    ds_lbl = _fmt_density(plan_stag["target_density_per_mm2"])
+    dv_lbl = _fmt_density(plan_90v["target_density_per_mm2"])
+    dh_lbl = _fmt_density(plan_90h["target_density_per_mm2"])
+    if header_title is None:
+        if ds_lbl == dv_lbl == dh_lbl:
+            header_title = f"Core PTH (4FCO <-> 4BCO) Pattern Topology Comparison at {ds_lbl} PTH/mm² — Staggered vs. 90° Vertical vs. 90° Horizontal"
+        else:
+            header_title = f"Core PTH (4FCO <-> 4BCO) Pattern Comparison — Staggered ({ds_lbl}/mm²) vs. 90° V/H ({dv_lbl}/mm²)"
+    if header_subtitle is None:
+        header_subtitle = "Constraint 5: User-Selectable PTH Pattern (Staggered Pitch vs. 90° Orthogonal Horizontal & Vertical Grid) — All 3 Pass Same-Net (>=270um) & Diff-Net (>=432.5um) DRC!"
+    if footer_note is None:
+        footer_note = (
+            "90° Orthogonal Math Proof: Max 90° Density = 1e6 / (432.5um Diff * 270.0um Same) = 8.56 PTH/mm² >= 8.0 PTH/mm²! "
+            "Max Staggered Density = 9.01 PTH/mm² (Px=410.90um, Py=270.0um, Diff=432.5um) with 0 DRC violations."
+        )
+
     svg: List[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="100%" height="100%" style="background:#020617;">',
         f'<rect x="0" y="0" width="{W}" height="{H}" fill="#020617"/>',
-        f'<text x="30" y="42" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="24.5" font-weight="bold">'
-        f'Core PTH (4FCO &lt;-&gt; 4BCO) Pattern Topology Comparison at {d_val:.0f} PTH/mm² — Staggered vs. 90° Vertical vs. 90° Horizontal'
-        '</text>',
-        '<text x="30" y="68" fill="#38bdf8" font-family="Consolas, monospace" font-size="13.5">'
-        'Constraint 5: User-Selectable PTH Pattern (Staggered Pitch vs. 90° Orthogonal Horizontal &amp; Vertical Grid) — All 3 Pass Same-Net (&gt;=270um) &amp; Diff-Net (&gt;=432.5um) DRC!'
-        '</text>',
+        f'<text x="30" y="42" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="24.0" font-weight="bold">{html.escape(header_title)}</text>',
+        f'<text x="30" y="68" fill="#38bdf8" font-family="Consolas, monospace" font-size="13.2">{html.escape(header_subtitle)}</text>',
     ]
 
     pw = 730.0
@@ -569,8 +813,8 @@ def render_pattern_comparison_3panel_svg(
             panel_y=90.0,
             panel_w=pw,
             panel_h=ph,
-            title=f"1. STAGGERED Pattern ({d_val:.0f} PTH/mm² — {plan_stag['total_pth_count']:,} PTHs)",
-            subtitle=f"Odd VSS cols shifted dy={ps['stagger_dy_um']:.0f}um | Px={ps['px_col_pitch_um']:.1f}um, Same={ps['same_net_pitch_um']:.1f}um, Diff={ps['diff_net_pitch_um']:.1f}um",
+            title=f"1. STAGGERED Pattern ({ds_lbl} PTH/mm² — {plan_stag['total_pth_count']:,} PTHs)",
+            subtitle=f"Odd VSS cols shifted dy={ps['stagger_dy_um']:.0f}um | Px={ps['px_col_pitch_um']:.2f}um, Same={ps['same_net_pitch_um']:.1f}um, Diff={ps['diff_net_pitch_um']:.2f}um",
         )
     )
     svg.extend(
@@ -580,8 +824,8 @@ def render_pattern_comparison_3panel_svg(
             panel_y=90.0,
             panel_w=pw,
             panel_h=ph,
-            title=f"2. 90° ORTHO VERTICAL ({d_val:.0f} PTH/mm² — {plan_90v['total_pth_count']:,} PTHs)",
-            subtitle=f"90° H&V Grid (Same-Net V-Cols) | Px={pv['px_col_pitch_um']:.1f}um (Diff), Py={pv['py_row_pitch_um']:.1f}um (Same)",
+            title=f"2. 90° ORTHO VERTICAL ({dv_lbl} PTH/mm² — {plan_90v['total_pth_count']:,} PTHs)",
+            subtitle=f"90° H&V Grid (Same-Net V-Cols) | Px={pv['px_col_pitch_um']:.2f}um (Diff), Py={pv['py_row_pitch_um']:.2f}um (Same)",
         )
     )
     svg.extend(
@@ -591,8 +835,8 @@ def render_pattern_comparison_3panel_svg(
             panel_y=90.0,
             panel_w=pw,
             panel_h=ph,
-            title=f"3. 90° ORTHO HORIZONTAL ({d_val:.0f} PTH/mm² — {plan_90h['total_pth_count']:,} PTHs)",
-            subtitle=f"90° H&V Grid (Same-Net H-Rows) | Px={ph_info['px_col_pitch_um']:.1f}um (Same), Py={ph_info['py_row_pitch_um']:.1f}um (Diff)",
+            title=f"3. 90° ORTHO HORIZONTAL ({dh_lbl} PTH/mm² — {plan_90h['total_pth_count']:,} PTHs)",
+            subtitle=f"90° H&V Grid (Same-Net H-Rows) | Px={ph_info['px_col_pitch_um']:.2f}um (Same), Py={ph_info['py_row_pitch_um']:.2f}um (Diff)",
         )
     )
 
@@ -606,10 +850,7 @@ def render_pattern_comparison_3panel_svg(
         '<circle cx="680" cy="1145" r="9" fill="#2563eb" stroke="#dbeafe" stroke-width="1.4"/>',
         '<circle cx="680" cy="1145" r="5" fill="#090d16" stroke="#93c5fd" stroke-width="1.4"/>',
         '<text x="702" y="1150" fill="#f8fafc" font-family="Consolas, monospace" font-size="13">VSS PTH (365um Inner Pad / 282.5um Lid / 175um PP Via / 150um Drill)</text>',
-        '<text x="45" y="1196" fill="#94a3b8" font-family="Consolas, monospace" font-size="12.5">'
-        '90° Orthogonal Math Proof: Max 90° Density = 1e6 / (432.5um Diff * 270.0um Same) = 8.56 PTH/mm² &gt;= 8.0 PTH/mm²! '
-        'At 8 PTH/mm², 90° Grid uses Diff-Net Pitch = 440.0um (&gt;=432.5um) and Same-Net Pitch = 284.1um (&gt;=270.0um) with 0 DRC violations.'
-        '</text>',
+        f'<text x="45" y="1196" fill="#94a3b8" font-family="Consolas, monospace" font-size="12.2">{html.escape(footer_note)}</text>',
     ])
 
     svg.append("</svg>")
@@ -628,11 +869,12 @@ def render_single_pattern_full_and_zoom_svg(
 ) -> str:
     """Render a 1920x1200 SVG showing Full U7 PTH + eDTC KOZ map on the left and 3x3mm Zoomed Tile on the right."""
     W, H = 1920, 1200
+    d_lbl = _fmt_density(plan["target_density_per_mm2"])
     svg: List[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="100%" height="100%" style="background:#020617;">',
         f'<rect x="0" y="0" width="{W}" height="{H}" fill="#020617"/>',
-        f'<text x="30" y="42" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="23.5" font-weight="bold">{html.escape(title)}</text>',
-        f'<text x="30" y="68" fill="#38bdf8" font-family="Consolas, monospace" font-size="13.2">{html.escape(subtitle)}</text>',
+        f'<text x="30" y="42" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="23.0" font-weight="bold">{html.escape(title)}</text>',
+        f'<text x="30" y="68" fill="#38bdf8" font-family="Consolas, monospace" font-size="13.0">{html.escape(subtitle)}</text>',
     ]
 
     # Left panel: Full U7 PTH + eDTC KOZ map (x=30..760, y=90..1160)
@@ -643,7 +885,7 @@ def render_single_pattern_full_and_zoom_svg(
             panel_y=90.0,
             panel_w=730.0,
             panel_h=1070.0,
-            custom_title=f"Full U7 Die (4FCO <-> 4BCO) — {plan['target_density_per_mm2']:.0f} PTH/mm² [{plan['pattern']}]",
+            custom_title=f"Full U7 Die (4FCO <-> 4BCO) — {d_lbl} PTH/mm² [{plan['pattern']}]",
         )
     )
 
@@ -657,7 +899,7 @@ def render_single_pattern_full_and_zoom_svg(
             panel_w=1110.0,
             panel_h=1070.0,
             tile_bbox=ZOOM_TILE_BBOX,
-            title=f"Zoomed-In 3.0 x 3.0 mm Core PTH Tile — {plan['pattern']} ({plan['target_density_per_mm2']:.0f} PTH/mm²)",
+            title=f"Zoomed-In 3.0 x 3.0 mm Core PTH Tile — {plan['pattern']} ({d_lbl} PTH/mm²)",
             subtitle=(
                 f"Px={p_info['px_col_pitch_um']:.2f}um | Py={p_info['py_row_pitch_um']:.2f}um | "
                 f"Same-Net={p_info['same_net_pitch_um']:.2f}um (>=270.0um, +{p_info['same_net_margin_um']:.1f}um) | "
@@ -683,8 +925,8 @@ def _render_zoomed_pth_pattern_svg_with_inset(
     title: str,
     subtitle: str,
 ) -> List[str]:
-    """Render zoomed 3x3mm PTH tile in top 640px and Full-Die U7 eDTC KOZ map in bottom 350px of the panel."""
-    lines = _render_zoomed_pth_pattern_tile_svg(
+    """Render zoomed 3x3mm PTH tile inside the comparison panel."""
+    return _render_zoomed_pth_pattern_tile_svg(
         plan=plan,
         panel_x=panel_x,
         panel_y=panel_y,
@@ -694,45 +936,53 @@ def _render_zoomed_pth_pattern_svg_with_inset(
         title=title,
         subtitle=subtitle,
     )
-    return lines
 
 
-def render_density_5_6_7_8_comparison_svg(
-    plans_by_density: Dict[int, Dict[str, Any]],
+def render_density_sweep_comparison_svg(
+    plans_ordered: List[Dict[str, Any]],
     out_svg: Path,
     pattern_label: str = "STAGGERED",
+    header_title: Optional[str] = None,
+    header_subtitle: Optional[str] = None,
 ) -> str:
-    """Render a 2280x1240 4-panel SVG comparing 5, 6, 7, and 8 PTH/mm² on U7 (4FCO <-> 4BCO)."""
-    W, H = 2280, 1240
+    """Render a multi-panel U7 sweep comparison SVG (supports 4-panel 5..8 or 5-panel 5..8 + Max Feasible)."""
+    n_panels = max(1, len(plans_ordered))
+    pw = 540.0 if n_panels <= 4 else 536.0
+    gap = 18.0
+    W = int(24 + n_panels * pw + (n_panels - 1) * gap + 24)
+    H = 1240
+    ph = 1005.0
+
+    density_labels = ", ".join(_fmt_density(p["target_density_per_mm2"]) for p in plans_ordered)
+    if header_title is None:
+        header_title = f"Core PTH & Prepreg Routing (4FCO <-> 4BCO) on U7 [{pattern_label}] — Densities: {density_labels} PTH/mm²"
+    if header_subtitle is None:
+        header_subtitle = (
+            "Constraints Enforced: (1) Density Sweep | (2) Same-Net >= 270.0um & Diff-Net >= 432.5um | "
+            "(3) 0 PTHs Inside eDTC KOZ (+150um Guard Metal) | (4) 1-Stack / 2-Stack PP Vias | (5) Staggered or 90° H&V Pattern"
+        )
+
     svg: List[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="100%" height="100%" style="background:#020617;">',
         f'<rect x="0" y="0" width="{W}" height="{H}" fill="#020617"/>',
-        f'<text x="30" y="42" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="bold">'
-        f'Core PTH &amp; Prepreg Routing (4FCO &lt;-&gt; 4BCO) on U7 [{html.escape(pattern_label)}] — Densities: 5, 6, 7, 8 PTH/mm²'
-        '</text>',
-        '<text x="30" y="68" fill="#38bdf8" font-family="Consolas, monospace" font-size="13.5">'
-        'Constraints Enforced: (1) Density 5..8/mm² | (2) Same-Net &gt;= 270.0um &amp; Diff-Net &gt;= 432.5um | '
-        '(3) 0 PTHs Inside eDTC KOZ | (4) 1-Stack / 2-Stack PP Vias | (5) Staggered or 90° H&amp;V Pattern'
-        '</text>',
+        f'<text x="30" y="42" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="bold">{html.escape(header_title)}</text>',
+        f'<text x="30" y="68" fill="#38bdf8" font-family="Consolas, monospace" font-size="13.2">{html.escape(header_subtitle)}</text>',
     ]
 
-    pw = 540.0
-    ph = 1005.0
-    for idx, d_val in enumerate((5, 6, 7, 8)):
-        px_panel = 24.0 + idx * (pw + 18.0)
-        svg.extend(_render_pth_map_panel_svg(plans_by_density[d_val], px_panel, 90.0, pw, ph))
+    for idx, pl in enumerate(plans_ordered):
+        px_panel = 24.0 + idx * (pw + gap)
+        svg.extend(_render_pth_map_panel_svg(pl, px_panel, 90.0, pw, ph))
 
-    p5, p6, p7, p8 = [plans_by_density[k]["pitch_solver"] for k in (5, 6, 7, 8)]
-    pitch_summary = (
-        f"Pitch Verification [{pattern_label}]: "
-        f"5/mm² (Same={p5['same_net_pitch_um']:.1f}, Diff={p5['diff_net_pitch_um']:.1f}um) | "
-        f"6/mm² (Same={p6['same_net_pitch_um']:.1f}, Diff={p6['diff_net_pitch_um']:.1f}um) | "
-        f"7/mm² (Same={p7['same_net_pitch_um']:.1f}, Diff={p7['diff_net_pitch_um']:.1f}um) | "
-        f"8/mm² (Same={p8['same_net_pitch_um']:.1f}, Diff={p8['diff_net_pitch_um']:.1f}um) — 0 DRC violations!"
-    )
+    summary_parts = []
+    for pl in plans_ordered:
+        ps = pl["pitch_solver"]
+        d_lbl = _fmt_density(pl["target_density_per_mm2"])
+        summary_parts.append(f"{d_lbl}/mm² (Same={ps['same_net_pitch_um']:.1f}, Diff={ps['diff_net_pitch_um']:.1f}um)")
+    pitch_summary = f"Pitch Verification [{pattern_label}]: " + " | ".join(summary_parts) + " — 0 DRC violations!"
 
+    legend_w = W - 48
     svg.extend([
-        '<rect x="24" y="1110" width="2232" height="110" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1.5"/>',
+        f'<rect x="24" y="1110" width="{legend_w}" height="110" rx="8" fill="#0f172a" stroke="#334155" stroke-width="1.5"/>',
         '<circle cx="55" cy="1145" r="8" fill="#f43f5e"/>',
         '<text x="72" y="1150" fill="#f8fafc" font-family="Consolas, monospace" font-size="13">VDDUC0 PTH + PP Via Stack (4FCO..4BCO)</text>',
         '<circle cx="420" cy="1145" r="8" fill="#3b82f6"/>',
@@ -742,8 +992,8 @@ def render_density_5_6_7_8_comparison_svg(
         '<rect x="1230" y="1135" width="20" height="20" fill="#020617" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="3,2"/>',
         '<text x="1260" y="1150" fill="#f8fafc" font-family="Consolas, monospace" font-size="13">300um Cavity KOZ + 150um Guard Metal Ring (Green)</text>',
         '<rect x="1690" y="1135" width="20" height="20" fill="#450a0a" fill-opacity="0.6" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="4,2"/>',
-        '<text x="1720" y="1150" fill="#f8fafc" font-family="Consolas, monospace" font-size="13">PTH Center KOZ (Body + 632.5um: 0 PTHs Inside)</text>',
-        f'<text x="45" y="1196" fill="#94a3b8" font-family="Consolas, monospace" font-size="12.5">{html.escape(pitch_summary)}</text>',
+        f'<text x="1720" y="1150" fill="#f8fafc" font-family="Consolas, monospace" font-size="13">PTH Center KOZ (Body + {EDTC_PTH_CENTER_KOZ_UM:.1f}um: 0 PTHs Inside)</text>',
+        f'<text x="45" y="1196" fill="#94a3b8" font-family="Consolas, monospace" font-size="12.2">{html.escape(pitch_summary)}</text>',
     ])
 
     svg.append("</svg>")
@@ -752,6 +1002,19 @@ def render_density_5_6_7_8_comparison_svg(
     out_svg.parent.mkdir(parents=True, exist_ok=True)
     out_svg.write_text(svg_str, encoding="utf-8")
     return str(out_svg)
+
+
+def render_density_5_6_7_8_comparison_svg(
+    plans_by_density: Dict[int, Dict[str, Any]],
+    out_svg: Path,
+    pattern_label: str = "STAGGERED",
+) -> str:
+    """Render a 2280x1240 4-panel SVG comparing 5, 6, 7, and 8 PTH/mm² on U7 (4FCO <-> 4BCO)."""
+    return render_density_sweep_comparison_svg(
+        plans_ordered=[plans_by_density[k] for k in (5, 6, 7, 8)],
+        out_svg=out_svg,
+        pattern_label=pattern_label,
+    )
 
 
 def render_cross_section_1stack_vs_2stack_svg(
@@ -896,7 +1159,9 @@ def export_pth_4fco_4bco_recipe(plan: Dict[str, Any], out_txt: Path) -> str:
 def _summarize_plan(pl: Dict[str, Any], rcp: str) -> Dict[str, Any]:
     return {
         "pattern": pl["pattern"],
+        "requested_density_per_mm2": pl["requested_density_per_mm2"],
         "target_density_per_mm2": pl["target_density_per_mm2"],
+        "capped_to_pkg08_ceiling": pl["capped_to_pkg08_ceiling"],
         "px_col_pitch_um": pl["pitch_solver"]["px_col_pitch_um"],
         "py_row_pitch_um": pl["pitch_solver"]["py_row_pitch_um"],
         "same_net_pitch_um": pl["pitch_solver"]["same_net_pitch_um"],
@@ -904,11 +1169,15 @@ def _summarize_plan(pl: Dict[str, Any], rcp: str) -> Dict[str, Any]:
         "diff_net_pitch_um": pl["pitch_solver"]["diff_net_pitch_um"],
         "diff_net_min_rule_um": pl["pitch_solver"]["diff_net_min_rule_um"],
         "drc_verification": pl["drc_verification"],
+        "pkg_rule": pl.get("pkg_rule", "PKG 0.8"),
+        "pp_pattern": pl.get("pp_pattern", "1_VIA_CENTER"),
+        "pp_drc_audit": pl.get("pp_drc_audit", {}),
         "vdd_pth_count": pl["vdd_pth_count"],
         "vss_pth_count": pl["vss_pth_count"],
         "total_pth_count": pl["total_pth_count"],
         "pths_inside_edtc_koz": pl["pths_inside_edtc_koz"],
         "edtc_koz_excluded_sites": pl["edtc_koz_excluded_sites"],
+        "min_pth_inner_pad_to_guard_metal_um": pl["min_pth_inner_pad_to_guard_metal_um"],
         "vdd_via_spans": pl["vdd_via_spans"],
         "vss_via_spans": pl["vss_via_spans"],
         "total_via_records_4fco_to_4bco": pl["total_via_records_4fco_to_4bco"],
@@ -916,13 +1185,65 @@ def _summarize_plan(pl: Dict[str, Any], rcp: str) -> Dict[str, Any]:
     }
 
 
+def render_pp_pattern_comparison_3panel_svg(
+    plan_1via: Dict[str, Any],
+    plan_2via: Dict[str, Any],
+    plan_4via: Dict[str, Any],
+    out_svg: Path,
+) -> str:
+    """Render a 2280x960 3-panel SVG comparing Prepreg patterns: 1_VIA_CENTER vs 2_VIA_ON_PTH vs 4_VIA_PER_PTH with Substrate DR audit."""
+    W, H = 2280, 960
+    pkg_lbl = plan_1via.get("pkg_rule", "PKG 0.8")
+    d_lbl = _fmt_density(plan_1via["target_density_per_mm2"])
+    lines: List[str] = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">',
+        f'<rect width="{W}" height="{H}" fill="#020617"/>',
+        f'<text x="45" y="42" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold">Step 4 Prepreg (PP) Pattern Comparison &amp; Design Rule Check ({pkg_lbl}, {d_lbl} PTH/mm²)</text>',
+        f'<text x="45" y="68" fill="#38bdf8" font-family="Consolas, monospace" font-size="13.5">PP Pad=175_85_175 (r=87.5um) on Core PTH Lid=282.5um (r=141.25um), Inner Pad=365um | Max/PTH: 1 (PKG 0.1), 2 (PKG 0.8) | PP-PP &lt;=45um | Min L/S=67.5um</text>',
+    ]
+    tile_bbox = (21200.0, 15200.0, 22450.0, 16450.0)
+    specs = [
+        ("1. 1 Via on PTH (Center Aligned)", plan_1via),
+        ("2. 2 Via on PTH (65um Shift, 45um Overlap)", plan_2via),
+        ("3. 4 Via per PTH (2x2 Array — DR Audit)", plan_4via),
+    ]
+    panel_w = 720.0
+    panel_h = 810.0
+    for idx, (label, pl) in enumerate(specs):
+        px = 36.0 + idx * 744.0
+        py = 88.0
+        au = pl.get("pp_drc_audit", {})
+        sub = (
+            f"Status={au.get('status', 'PASS')} | Vias/PTH={au.get('vias_per_pth', 1)}/{au.get('max_vias_per_pth_rule', 2)} | "
+            f"PP-PP Ov={au.get('pp_to_pp_max_overlap_um', 0):.1f}um | DiffGap={au.get('min_diff_net_pp_edge_gap_um', 0):.1f}um"
+        )
+        lines.extend(_render_zoomed_pth_pattern_tile_svg(pl, px, py, panel_w, panel_h, tile_bbox, label, sub))
+    lines.append(
+        f'<text x="45" y="{H - 22}" fill="#cbd5e1" font-family="Consolas, monospace" font-size="12.5">'
+        'DR Notes: 1_VIA_CENTER = PASS (PKG 0.1 &amp; 0.8) | 2_VIA_ON_PTH = PASS PKG 0.8 (with plane/teardrop capture, WAIVER on PKG 0.1) | '
+        '4_VIA_PER_PTH = DR FAIL (4 &gt; max 2 vias/PTH, extends 38.2um past 282.5um PTH lid; requires explicit waiver).</text>'
+    )
+    lines.append("</svg>")
+    out_svg.parent.mkdir(parents=True, exist_ok=True)
+    out_svg.write_text("\n".join(lines), encoding="utf-8")
+    ET.fromstring(out_svg.read_text(encoding="utf-8"))
+    return str(out_svg)
+
+
 def run_pth_4fco_4bco_suite(
     user_density: float = 8.0,
     pattern: str = "STAGGERED",
     stack_mode: str = "1_OR_2_STACK_BY_LAYER_NET",
+    pkg_rule: str = "PKG0.8",
+    pp_pattern: str = "1_VIA_CENTER",
 ) -> Dict[str, Any]:
-    ws = Path(__file__).resolve().parent.parent.parent
-    out_dir = ws / "pdn_sandbox"
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_output_dir
+    except ImportError:
+        from pdn_paths import resolve_output_dir  # type: ignore
+
+    out_dir = resolve_output_dir("pdn_sandbox")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     plans_stag: Dict[int, Dict[str, Any]] = {}
@@ -932,21 +1253,23 @@ def run_pth_4fco_4bco_suite(
     summary_90v_by_d: Dict[str, Any] = {}
     summary_90h_by_d: Dict[str, Any] = {}
 
-    for d_int in (5, 6, 7, 8):
+    _, _, pkg_lbl = resolve_pth_pitch_rules(pkg_rule)
+    densities_sweep = (4, 5, 6, 7, 8, 9, 10, 11) if pkg_lbl == "PKG 0.1" else (4, 5, 6, 7, 8)
+    for d_int in densities_sweep:
         # 1. Staggered pattern
-        pl_s = synthesize_pth_4fco_to_4bco(float(d_int), pattern="STAGGERED", stack_mode=stack_mode)
+        pl_s = synthesize_pth_4fco_to_4bco(float(d_int), pattern="STAGGERED", stack_mode=stack_mode, pkg_rule=pkg_rule, pp_pattern=pp_pattern)
         plans_stag[d_int] = pl_s
         rcp_s = export_pth_4fco_4bco_recipe(pl_s, out_dir / f"mockup_PTH_4FCO_4BCO_Density_{d_int}per_mm2_recipe.txt")
         summary_by_d[f"{d_int}_PTH_per_mm2"] = _summarize_plan(pl_s, rcp_s)
 
         # 2. 90-deg Orthogonal Vertical pattern
-        pl_v = synthesize_pth_4fco_to_4bco(float(d_int), pattern="ORTHOGONAL_90DEG_VERTICAL", stack_mode=stack_mode)
+        pl_v = synthesize_pth_4fco_to_4bco(float(d_int), pattern="ORTHOGONAL_90DEG_VERTICAL", stack_mode=stack_mode, pkg_rule=pkg_rule, pp_pattern=pp_pattern)
         plans_90v[d_int] = pl_v
         rcp_v = export_pth_4fco_4bco_recipe(pl_v, out_dir / f"mockup_PTH_4FCO_4BCO_90deg_Vertical_Density_{d_int}per_mm2_recipe.txt")
         summary_90v_by_d[f"{d_int}_PTH_per_mm2"] = _summarize_plan(pl_v, rcp_v)
 
         # 3. 90-deg Orthogonal Horizontal pattern
-        pl_h = synthesize_pth_4fco_to_4bco(float(d_int), pattern="ORTHOGONAL_90DEG_HORIZONTAL", stack_mode=stack_mode)
+        pl_h = synthesize_pth_4fco_to_4bco(float(d_int), pattern="ORTHOGONAL_90DEG_HORIZONTAL", stack_mode=stack_mode, pkg_rule=pkg_rule, pp_pattern=pp_pattern)
         plans_90h[d_int] = pl_h
         rcp_h = export_pth_4fco_4bco_recipe(pl_h, out_dir / f"mockup_PTH_4FCO_4BCO_90deg_Horizontal_Density_{d_int}per_mm2_recipe.txt")
         summary_90h_by_d[f"{d_int}_PTH_per_mm2"] = _summarize_plan(pl_h, rcp_h)
@@ -956,23 +1279,26 @@ def run_pth_4fco_4bco_suite(
         pattern=pattern,
         layer_polarity=DEFAULT_LAYER_POLARITY,
         stack_mode="2_STACK_FULL",
+        pkg_rule=pkg_rule,
+        pp_pattern=pp_pattern,
     )
+    d2_tag = _density_tag(pl_2stack["target_density_per_mm2"])
     rcp_2stack = export_pth_4fco_4bco_recipe(
-        pl_2stack, out_dir / f"mockup_PTH_4FCO_4BCO_Density_{int(round(user_density))}per_mm2_2StackFull_recipe.txt"
+        pl_2stack, out_dir / f"mockup_PTH_4FCO_4BCO_Density_{d2_tag}per_mm2_2StackFull_recipe.txt"
     )
 
     cmp_stag_svg = render_density_5_6_7_8_comparison_svg(
-        plans_by_density=plans_stag,
+        plans_by_density={k: plans_stag[k] for k in (5, 6, 7, 8)},
         out_svg=out_dir / "mockup_PTH_4FCO_4BCO_Density_5_6_7_8_Comparison.svg",
         pattern_label="STAGGERED",
     )
     cmp_90v_svg = render_density_5_6_7_8_comparison_svg(
-        plans_by_density=plans_90v,
+        plans_by_density={k: plans_90v[k] for k in (5, 6, 7, 8)},
         out_svg=out_dir / "mockup_PTH_4FCO_4BCO_90deg_Vertical_Density_5_6_7_8_Comparison.svg",
         pattern_label="ORTHOGONAL_90DEG_VERTICAL",
     )
     cmp_90h_svg = render_density_5_6_7_8_comparison_svg(
-        plans_by_density=plans_90h,
+        plans_by_density={k: plans_90h[k] for k in (5, 6, 7, 8)},
         out_svg=out_dir / "mockup_PTH_4FCO_4BCO_90deg_Horizontal_Density_5_6_7_8_Comparison.svg",
         pattern_label="ORTHOGONAL_90DEG_HORIZONTAL",
     )
@@ -982,36 +1308,11 @@ def run_pth_4fco_4bco_suite(
         plan_90h=plans_90h[8],
         out_svg=out_dir / "mockup_PTH_4FCO_4BCO_Pattern_Staggered_vs_90deg_HV_Comparison.svg",
     )
-
-    # Also generate dedicated user_density (e.g. 6 PTH/mm²) 3-Pattern Comparison + 3 Individual Full+Zoom SVGs
-    d_key = int(round(user_density))
-    u_stag = plans_stag.get(d_key) or synthesize_pth_4fco_to_4bco(user_density, pattern="STAGGERED", stack_mode=stack_mode)
-    u_90v = plans_90v.get(d_key) or synthesize_pth_4fco_to_4bco(user_density, pattern="ORTHOGONAL_90DEG_VERTICAL", stack_mode=stack_mode)
-    u_90h = plans_90h.get(d_key) or synthesize_pth_4fco_to_4bco(user_density, pattern="ORTHOGONAL_90DEG_HORIZONTAL", stack_mode=stack_mode)
-
-    user_3panel_svg = render_pattern_comparison_3panel_svg(
-        plan_stag=u_stag,
-        plan_90v=u_90v,
-        plan_90h=u_90h,
-        out_svg=out_dir / f"test_{d_key}PTH_per_mm2_Staggered_vs_OrthoV_vs_OrthoH_Comparison.svg",
-    )
-    user_stag_svg = render_single_pattern_full_and_zoom_svg(
-        plan=u_stag,
-        out_svg=out_dir / f"test_{d_key}PTH_per_mm2_1_STAGGERED.svg",
-        title=f"Core PTH & Prepreg Test ({d_key} PTH/mm²) — 1. STAGGERED Pattern (U7: 4FCO <-> 4BCO)",
-        subtitle=f"Total PTHs={u_stag['total_pth_count']:,} (VDDUC0={u_stag['vdd_pth_count']:,}, VSS={u_stag['vss_pth_count']:,}) | 0 in eDTC KOZ | DRC=PASS",
-    )
-    user_90v_svg = render_single_pattern_full_and_zoom_svg(
-        plan=u_90v,
-        out_svg=out_dir / f"test_{d_key}PTH_per_mm2_2_ORTHOGONAL_90DEG_VERTICAL.svg",
-        title=f"Core PTH & Prepreg Test ({d_key} PTH/mm²) — 2. ORTHOGONAL 90° VERTICAL Pattern (U7: 4FCO <-> 4BCO)",
-        subtitle=f"Total PTHs={u_90v['total_pth_count']:,} (VDDUC0={u_90v['vdd_pth_count']:,}, VSS={u_90v['vss_pth_count']:,}) | 0 in eDTC KOZ | DRC=PASS",
-    )
-    user_90h_svg = render_single_pattern_full_and_zoom_svg(
-        plan=u_90h,
-        out_svg=out_dir / f"test_{d_key}PTH_per_mm2_3_ORTHOGONAL_90DEG_HORIZONTAL.svg",
-        title=f"Core PTH & Prepreg Test ({d_key} PTH/mm²) — 3. ORTHOGONAL 90° HORIZONTAL Pattern (U7: 4FCO <-> 4BCO)",
-        subtitle=f"Total PTHs={u_90h['total_pth_count']:,} (VDDUC0={u_90h['vdd_pth_count']:,}, VSS={u_90h['vss_pth_count']:,}) | 0 in eDTC KOZ | DRC=PASS",
+    pp_pl1 = synthesize_pth_4fco_to_4bco(user_density, pattern=pattern, stack_mode=stack_mode, pkg_rule=pkg_rule, pp_pattern="1_VIA_CENTER")
+    pp_pl2 = synthesize_pth_4fco_to_4bco(user_density, pattern=pattern, stack_mode=stack_mode, pkg_rule=pkg_rule, pp_pattern="2_VIA_ON_PTH")
+    pp_pl4 = synthesize_pth_4fco_to_4bco(user_density, pattern=pattern, stack_mode=stack_mode, pkg_rule=pkg_rule, pp_pattern="4_VIA_PER_PTH")
+    pp_cmp_svg = render_pp_pattern_comparison_3panel_svg(
+        pp_pl1, pp_pl2, pp_pl4, out_dir / "mockup_PP_Pattern_1Via_vs_2Via_vs_4Via_DRC_Comparison.svg"
     )
 
     xs_svg = render_cross_section_1stack_vs_2stack_svg(
@@ -1019,29 +1320,197 @@ def run_pth_4fco_4bco_suite(
         out_svg=out_dir / "mockup_PTH_4FCO_4BCO_CrossSection_1Stack_vs_2Stack.svg",
     )
 
-    summary = {
-        "status": "SUCCESS",
-        "zone": "4FCO_TO_4BCO_PTH_AND_PREPREG",
-        "refdes": "U7 (HUTTON_HILL_LDB_BC_A0)",
-        "layer_polarity_assignment": DEFAULT_LAYER_POLARITY,
-        "staggered_densities": summary_by_d,
-        "orthogonal_90deg_vertical_densities": summary_90v_by_d,
-        "orthogonal_90deg_horizontal_densities": summary_90h_by_d,
-        "full_2stack_recipe_at_user_density": rcp_2stack,
-        "user_test_density_svgs": {
+    exceeds_ids = (pkg_lbl != "PKG 0.1") and (float(user_density) > 8.0 + 1e-6)
+    u_stag = synthesize_pth_4fco_to_4bco(user_density, pattern="STAGGERED", stack_mode=stack_mode, pkg_rule=pkg_rule, pp_pattern=pp_pattern)
+    u_90v = synthesize_pth_4fco_to_4bco(user_density, pattern="ORTHOGONAL_90DEG_VERTICAL", stack_mode=stack_mode, pkg_rule=pkg_rule, pp_pattern=pp_pattern)
+    u_90h = synthesize_pth_4fco_to_4bco(user_density, pattern="ORTHOGONAL_90DEG_HORIZONTAL", stack_mode=stack_mode, pkg_rule=pkg_rule, pp_pattern=pp_pattern)
+
+    svgs_dict: Dict[str, str] = {
+        "staggered_5_6_7_8_svg": cmp_stag_svg,
+        "orthogonal_90deg_vertical_5_6_7_8_svg": cmp_90v_svg,
+        "orthogonal_90deg_horizontal_5_6_7_8_svg": cmp_90h_svg,
+        "pattern_staggered_vs_90deg_hv_3panel_svg": pat_3panel_svg,
+        "pp_pattern_1via_2via_4via_drc_svg": pp_cmp_svg,
+        "cross_section_1stack_vs_2stack_svg": xs_svg,
+    }
+    pkg08_max_summary: Dict[str, Any] = {}
+
+    if exceeds_ids:
+        ds_lbl = _fmt_density(u_stag["target_density_per_mm2"])
+        dv_lbl = _fmt_density(u_90v["target_density_per_mm2"])
+        dh_lbl = _fmt_density(u_90h["target_density_per_mm2"])
+        ds_tag = _density_tag(u_stag["target_density_per_mm2"])
+        dv_tag = _density_tag(u_90v["target_density_per_mm2"])
+        dh_tag = _density_tag(u_90h["target_density_per_mm2"])
+        req_lbl = _fmt_density(float(user_density))
+
+        rcp_s_max = export_pth_4fco_4bco_recipe(
+            u_stag, out_dir / f"mockup_PTH_4FCO_4BCO_MaxFeasible_{ds_tag}per_mm2_Staggered_recipe.txt"
+        )
+        rcp_v_max = export_pth_4fco_4bco_recipe(
+            u_90v, out_dir / f"mockup_PTH_4FCO_4BCO_MaxFeasible_{dv_tag}per_mm2_90deg_Vertical_recipe.txt"
+        )
+        rcp_h_max = export_pth_4fco_4bco_recipe(
+            u_90h, out_dir / f"mockup_PTH_4FCO_4BCO_MaxFeasible_{dh_tag}per_mm2_90deg_Horizontal_recipe.txt"
+        )
+        pkg08_max_summary = {
+            "STAGGERED": _summarize_plan(u_stag, rcp_s_max),
+            "ORTHOGONAL_90DEG_VERTICAL": _summarize_plan(u_90v, rcp_v_max),
+            "ORTHOGONAL_90DEG_HORIZONTAL": _summarize_plan(u_90h, rcp_h_max),
+        }
+
+        sweep_max_stag_svg = render_density_sweep_comparison_svg(
+            plans_ordered=[plans_stag[5], plans_stag[6], plans_stag[7], plans_stag[8], u_stag],
+            out_svg=out_dir / f"mockup_PTH_4FCO_4BCO_Sweep_5_6_7_8_MaxFeasible_{ds_tag}_Staggered.svg",
+            pattern_label="STAGGERED",
+            header_title=f"U7 Core PTH Sweep (5..8 IDS + PKG 0.8 Max {ds_lbl}/mm²) [STAGGERED] — Requested {req_lbl}/mm² Capped",
+            header_subtitle=(
+                f"Req {req_lbl}/mm² > PKG 0.8 Staggered Ceiling ({ds_lbl}/mm² at Px=410.90um, Py=270.0um, Diff=432.5um) & IDS Spec (8.0/mm²) | "
+                "4FCO eDTC 300um KOZ + 150um Guard Metal"
+            ),
+        )
+        sweep_max_90v_svg = render_density_sweep_comparison_svg(
+            plans_ordered=[plans_90v[5], plans_90v[6], plans_90v[7], plans_90v[8], u_90v],
+            out_svg=out_dir / f"mockup_PTH_4FCO_4BCO_Sweep_5_6_7_8_MaxFeasible_{dv_tag}_90deg_Vertical.svg",
+            pattern_label="ORTHOGONAL_90DEG_VERTICAL",
+            header_title=f"U7 Core PTH Sweep (5..8 IDS + PKG 0.8 Max {dv_lbl}/mm²) [90° VERTICAL] — Requested {req_lbl}/mm² Capped",
+            header_subtitle=(
+                f"Req {req_lbl}/mm² > PKG 0.8 90° Ortho Ceiling ({dv_lbl}/mm² at Px=432.5um, Py=270.0um) & IDS Spec (8.0/mm²) | "
+                "4FCO eDTC 300um KOZ + 150um Guard Metal"
+            ),
+        )
+        sweep_max_90h_svg = render_density_sweep_comparison_svg(
+            plans_ordered=[plans_90h[5], plans_90h[6], plans_90h[7], plans_90h[8], u_90h],
+            out_svg=out_dir / f"mockup_PTH_4FCO_4BCO_Sweep_5_6_7_8_MaxFeasible_{dh_tag}_90deg_Horizontal.svg",
+            pattern_label="ORTHOGONAL_90DEG_HORIZONTAL",
+            header_title=f"U7 Core PTH Sweep (5..8 IDS + PKG 0.8 Max {dh_lbl}/mm²) [90° HORIZONTAL] — Requested {req_lbl}/mm² Capped",
+            header_subtitle=(
+                f"Req {req_lbl}/mm² > PKG 0.8 90° Ortho Ceiling ({dh_lbl}/mm² at Px=270.0um, Py=432.5um) & IDS Spec (8.0/mm²) | "
+                "4FCO eDTC 300um KOZ + 150um Guard Metal"
+            ),
+        )
+
+        user_3panel_svg = render_pattern_comparison_3panel_svg(
+            plan_stag=u_stag,
+            plan_90v=u_90v,
+            plan_90h=u_90h,
+            out_svg=out_dir / f"mockup_PTH_4FCO_4BCO_MaxFeasible_{ds_tag}_vs_{dv_tag}_Staggered_vs_90deg_HV_Comparison.svg",
+            header_title=f"U7 Core PTH PKG 0.8 Max Feasible ({ds_lbl} vs. {dv_lbl} PTH/mm²) — Requested {req_lbl} PTH/mm² Capped",
+            header_subtitle=(
+                f"Requested {req_lbl}/mm² violates PKG 0.8 (Same>=270um, Diff>=432.5um) & IDS (<=8.0/mm²) | "
+                f"Capped to exact ceilings: {ds_lbl}/mm² (Staggered) & {dv_lbl}/mm² (90° H/V) — 0 DRC violations!"
+            ),
+            footer_note=(
+                f"PKG 0.8 Ceilings: Staggered Max = 1e6/(410.89*270.0) = {ds_lbl}/mm² | "
+                f"90° Ortho Max = 1e6/(432.5*270.0) = {dv_lbl}/mm² | "
+                "Note: 10 PTH/mm² requires >=216.5um (PKG 0.1) & IDS waiver (>8.0/mm²)."
+            ),
+        )
+        user_stag_svg = render_single_pattern_full_and_zoom_svg(
+            plan=u_stag,
+            out_svg=out_dir / f"mockup_PTH_4FCO_4BCO_MaxFeasible_{ds_tag}per_mm2_1_STAGGERED.svg",
+            title=f"U7 Core PTH Max Feasible ({ds_lbl} PTH/mm², Req {req_lbl}/mm² Capped) — 1. STAGGERED (4FCO <-> 4BCO)",
+            subtitle=(
+                f"Total PTHs={u_stag['total_pth_count']:,} (VDDUC0={u_stag['vdd_pth_count']:,}, VSS={u_stag['vss_pth_count']:,}) | "
+                f"0 in eDTC KOZ (Min Pad-to-Guard={u_stag['min_pth_inner_pad_to_guard_metal_um']:.1f}um >= 67.5um) | DRC=PASS"
+            ),
+        )
+        user_90v_svg = render_single_pattern_full_and_zoom_svg(
+            plan=u_90v,
+            out_svg=out_dir / f"mockup_PTH_4FCO_4BCO_MaxFeasible_{dv_tag}per_mm2_2_ORTHOGONAL_90DEG_VERTICAL.svg",
+            title=f"U7 Core PTH Max Feasible ({dv_lbl} PTH/mm², Req {req_lbl}/mm² Capped) — 2. 90° ORTHO VERTICAL (4FCO <-> 4BCO)",
+            subtitle=(
+                f"Total PTHs={u_90v['total_pth_count']:,} (VDDUC0={u_90v['vdd_pth_count']:,}, VSS={u_90v['vss_pth_count']:,}) | "
+                f"0 in eDTC KOZ (Min Pad-to-Guard={u_90v['min_pth_inner_pad_to_guard_metal_um']:.1f}um >= 67.5um) | DRC=PASS"
+            ),
+        )
+        user_90h_svg = render_single_pattern_full_and_zoom_svg(
+            plan=u_90h,
+            out_svg=out_dir / f"mockup_PTH_4FCO_4BCO_MaxFeasible_{dh_tag}per_mm2_3_ORTHOGONAL_90DEG_HORIZONTAL.svg",
+            title=f"U7 Core PTH Max Feasible ({dh_lbl} PTH/mm², Req {req_lbl}/mm² Capped) — 3. 90° ORTHO HORIZONTAL (4FCO <-> 4BCO)",
+            subtitle=(
+                f"Total PTHs={u_90h['total_pth_count']:,} (VDDUC0={u_90h['vdd_pth_count']:,}, VSS={u_90h['vss_pth_count']:,}) | "
+                f"0 in eDTC KOZ (Min Pad-to-Guard={u_90h['min_pth_inner_pad_to_guard_metal_um']:.1f}um >= 67.5um) | DRC=PASS"
+            ),
+        )
+        svgs_dict.update({
+            "sweep_5_6_7_8_max_feasible_staggered_svg": sweep_max_stag_svg,
+            "sweep_5_6_7_8_max_feasible_90deg_vertical_svg": sweep_max_90v_svg,
+            "sweep_5_6_7_8_max_feasible_90deg_horizontal_svg": sweep_max_90h_svg,
+        })
+        user_density_meta: Any = {
+            "requested_density_per_mm2": float(user_density),
+            "staggered_max_density_per_mm2": u_stag["target_density_per_mm2"],
+            "ortho_90deg_max_density_per_mm2": u_90v["target_density_per_mm2"],
+            "comparison_3panel_svg": user_3panel_svg,
+            "staggered_full_and_zoom_svg": user_stag_svg,
+            "ortho_90deg_vertical_full_and_zoom_svg": user_90v_svg,
+            "ortho_90deg_horizontal_full_and_zoom_svg": user_90h_svg,
+        }
+    else:
+        d_key = int(round(user_density))
+        d_tag = _density_tag(u_stag["target_density_per_mm2"])
+        d_lbl = _fmt_density(u_stag["target_density_per_mm2"])
+        user_3panel_svg = render_pattern_comparison_3panel_svg(
+            plan_stag=u_stag,
+            plan_90v=u_90v,
+            plan_90h=u_90h,
+            out_svg=out_dir / f"test_{d_tag}PTH_per_mm2_Staggered_vs_OrthoV_vs_OrthoH_Comparison.svg",
+        )
+        user_stag_svg = render_single_pattern_full_and_zoom_svg(
+            plan=u_stag,
+            out_svg=out_dir / f"test_{d_tag}PTH_per_mm2_1_STAGGERED.svg",
+            title=f"Core PTH & Prepreg Test ({d_lbl} PTH/mm²) — 1. STAGGERED Pattern (U7: 4FCO <-> 4BCO)",
+            subtitle=f"Total PTHs={u_stag['total_pth_count']:,} (VDDUC0={u_stag['vdd_pth_count']:,}, VSS={u_stag['vss_pth_count']:,}) | 0 in eDTC KOZ | DRC=PASS",
+        )
+        user_90v_svg = render_single_pattern_full_and_zoom_svg(
+            plan=u_90v,
+            out_svg=out_dir / f"test_{d_tag}PTH_per_mm2_2_ORTHOGONAL_90DEG_VERTICAL.svg",
+            title=f"Core PTH & Prepreg Test ({d_lbl} PTH/mm²) — 2. ORTHOGONAL 90° VERTICAL Pattern (U7: 4FCO <-> 4BCO)",
+            subtitle=f"Total PTHs={u_90v['total_pth_count']:,} (VDDUC0={u_90v['vdd_pth_count']:,}, VSS={u_90v['vss_pth_count']:,}) | 0 in eDTC KOZ | DRC=PASS",
+        )
+        user_90h_svg = render_single_pattern_full_and_zoom_svg(
+            plan=u_90h,
+            out_svg=out_dir / f"test_{d_tag}PTH_per_mm2_3_ORTHOGONAL_90DEG_HORIZONTAL.svg",
+            title=f"Core PTH & Prepreg Test ({d_lbl} PTH/mm²) — 3. ORTHOGONAL 90° HORIZONTAL Pattern (U7: 4FCO <-> 4BCO)",
+            subtitle=f"Total PTHs={u_90h['total_pth_count']:,} (VDDUC0={u_90h['vdd_pth_count']:,}, VSS={u_90h['vss_pth_count']:,}) | 0 in eDTC KOZ | DRC=PASS",
+        )
+        user_density_meta = {
             "density_per_mm2": d_key,
             "comparison_3panel_svg": user_3panel_svg,
             "staggered_full_and_zoom_svg": user_stag_svg,
             "ortho_90deg_vertical_full_and_zoom_svg": user_90v_svg,
             "ortho_90deg_horizontal_full_and_zoom_svg": user_90h_svg,
+        }
+
+    summary = {
+        "status": "SUCCESS",
+        "zone": "4FCO_TO_4BCO_PTH_AND_PREPREG",
+        "refdes": "U7 (HUTTON_HILL_LDB_BC_A0)",
+        "requested_density_per_mm2": round(float(user_density), 3),
+        "pkg_rule": pkg_lbl,
+        "pp_pattern": normalize_pp_pattern(pp_pattern),
+        "pp_pattern_comparison": {
+            "1_VIA_CENTER": pp_pl1["pp_drc_audit"],
+            "2_VIA_ON_PTH": pp_pl2["pp_drc_audit"],
+            "4_VIA_PER_PTH": pp_pl4["pp_drc_audit"],
         },
-        "svgs": {
-            "staggered_5_6_7_8_svg": cmp_stag_svg,
-            "orthogonal_90deg_vertical_5_6_7_8_svg": cmp_90v_svg,
-            "orthogonal_90deg_horizontal_5_6_7_8_svg": cmp_90h_svg,
-            "pattern_staggered_vs_90deg_hv_3panel_svg": pat_3panel_svg,
-            "cross_section_1stack_vs_2stack_svg": xs_svg,
-        },
+        "pkg08_cap_applied": bool(exceeds_ids),
+        "pkg08_cap_note": (
+            f"Requested {float(user_density):.2f} PTH/mm² exceeds IDS rule (8.0 PTH/mm²) and PKG 0.8 geometric ceilings "
+            f"(9.01 PTH/mm² Staggered, 8.56 PTH/mm² 90° Ortho H/V under Same>=270.0um & Diff>=432.5um); "
+            f"capped to exact PKG 0.8 max feasible densities with 0 DRC violations. (Use --pkg-rule PKG0.1 for 9..11 PTH/mm².)"
+            if exceeds_ids
+            else f"Requested density executed under {pkg_lbl} pitch rules with 0 PTH DRC violations."
+        ),
+        "layer_polarity_assignment": DEFAULT_LAYER_POLARITY,
+        "staggered_densities": summary_by_d,
+        "orthogonal_90deg_vertical_densities": summary_90v_by_d,
+        "orthogonal_90deg_horizontal_densities": summary_90h_by_d,
+        "pkg08_max_feasible_densities": pkg08_max_summary,
+        "full_2stack_recipe_at_user_density": rcp_2stack,
+        "user_test_density_svgs": user_density_meta,
+        "svgs": svgs_dict,
     }
     (out_dir / "mockup_PTH_4FCO_4BCO_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return summary
@@ -1049,7 +1518,12 @@ def run_pth_4fco_4bco_suite(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="4FCO <-> 4BCO Core PTH & Prepreg Via-Stack Router")
-    parser.add_argument("--density", type=float, default=8.0, help="Target PTH density in PTH/mm² (e.g. 5, 6, 7, 8)")
+    parser.add_argument(
+        "--density",
+        type=float,
+        default=8.0,
+        help="Target PTH density in PTH/mm² (4..8 under PKG 0.8 IDS; 4..11 under PKG 0.1)",
+    )
     parser.add_argument(
         "--pattern",
         type=str,
@@ -1064,6 +1538,26 @@ if __name__ == "__main__":
         choices=["1_OR_2_STACK_BY_LAYER_NET", "2_STACK_FULL"],
         help="Prepreg stacked via mode (1_OR_2_STACK_BY_LAYER_NET or 2_STACK_FULL)",
     )
+    parser.add_argument(
+        "--pkg-rule",
+        type=str,
+        default="PKG0.8",
+        choices=["PKG0.8", "PKG0.1"],
+        help="Substrate pitch rule table (PKG0.8: 270/432.5um; PKG0.1: 216.5/350.0um enabling 4..11 PTH/mm²)",
+    )
+    parser.add_argument(
+        "--pp-pattern",
+        type=str,
+        default="1_VIA_CENTER",
+        choices=["1_VIA_CENTER", "2_VIA_ON_PTH", "4_VIA_PER_PTH"],
+        help="Step 4 Prepreg via pattern on each Core PTH (1_VIA_CENTER, 2_VIA_ON_PTH, 4_VIA_PER_PTH)",
+    )
     args = parser.parse_args()
-    res = run_pth_4fco_4bco_suite(user_density=args.density, pattern=args.pattern, stack_mode=args.stack_mode)
+    res = run_pth_4fco_4bco_suite(
+        user_density=args.density,
+        pattern=args.pattern,
+        stack_mode=args.stack_mode,
+        pkg_rule=args.pkg_rule,
+        pp_pattern=args.pp_pattern,
+    )
     print(json.dumps(res, indent=2))

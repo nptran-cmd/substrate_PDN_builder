@@ -112,10 +112,15 @@ def run_u7_topside_bu_sandbox(
     workspace_dir: Path | None = None,
     out_folder_name: str = "pdn_sandbox",
 ) -> Dict[str, Any]:
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_output_dir, resolve_stage1_inputs_dir
+    except ImportError:
+        from pdn_paths import resolve_output_dir, resolve_stage1_inputs_dir  # type: ignore
+
     workspace = workspace_dir or Path(__file__).resolve().parent.parent.parent
-    out_dir = workspace / out_folder_name
+    out_dir = (workspace_dir / out_folder_name) if workspace_dir is not None else resolve_output_dir(out_folder_name)
     out_dir.mkdir(parents=True, exist_ok=True)
-    s1_dir = workspace / "agent04_pdn_architect" / "stage1_inputs"
+    s1_dir = (workspace_dir / "agent04_pdn_architect" / "stage1_inputs") if workspace_dir is not None else resolve_stage1_inputs_dir()
 
     # 1. Load U7's 4 underlying 4FCO eDTC symbols (C2238, C2239, C2209, C2210) & their pins
     u7_edtc_syms: Dict[str, Dict[str, Any]] = {}
@@ -155,7 +160,7 @@ def run_u7_topside_bu_sandbox(
 
     # 2. Load U7 SURFACE VDD* bumps from Symbols/hutton_hill_ldb_bc_a0_FN.zip
     u7_vdd_bumps: List[Dict[str, Any]] = []
-    ldb_zip = Path(r"G:\My Drive\HFC_TO_docs\Symbols\hutton_hill_ldb_bc_a0_FN.zip")
+    ldb_zip = Path(r"<cadence_library_dir>")
     if ldb_zip.exists():
         with zipfile.ZipFile(ldb_zip, "r") as z:
             raw = z.read("U1.HUTTON_HILL_LDB_A0.csv").decode("utf-8", errors="ignore")

@@ -149,12 +149,19 @@ def lsc_sro_box_clearance_to_cavity(
 
 def get_bga_via_offsets(pattern_option: str) -> List[Tuple[float, float]]:
     """
-    Return `(dx, dy)` offsets in um for `12B -> BASE` (`V90_65_90_12B_BASE_01A`) vias on a BGA pad:
-      - `OPTION1_4VIA_SQUARE_2X2`: 4 vias at `(±110.0, ±110.0) um` (`220.0 um` pitch)
-      - `OPTION2_5VIA_QUINCUNX`  : 5 vias at `(0, 0)` + `(±135.0, ±135.0) um` (`190.9 um` center-to-corner)
-      - `OPTION3_6VIA_HEX_RING`  : 6 vias at `(0, ±195.0)` + `(±137.9, ±137.9) um` (`R = 195.0 um` ring)
+    Return `(dx, dy)` offsets in um for `12B -> BASE` (`V90_65_90_12B_BASE_01A`, `r=45.0um`) vias on a BGA pad:
+      - `OPTION1_4VIA_SQUARE_2X2`                  : 4 vias at `(±110.0, ±110.0) um` (`220.0 um` pitch)
+      - `OPTION2_5VIA_QUINCUNX`                    : 5 vias at `(0, 0)` + `(±135.0, ±135.0) um` (`190.9 um` center-to-corner)
+      - `OPTION3_6VIA_HEX_RING`                    : 6 vias at `(0, ±195.0)` + `(±137.9, ±137.9) um` (`R = 195.0 um` ring)
+      - `OPTION4_4VIA_CENTER_ZERO_OVERLAP`         : 4 vias centered on BGA at `(±45.5, ±45.5) um` (`91.0 um` pitch,
+                                                     `+1.0 um` edge gap / `0.0 um` pad overlap for `90 um` pads!)
+      - `OPTION5_4VIA_90UM_PITCH_WITH_INTERSTITIAL`: 4 vias at exact `90.0 um` pitch `(±45.0, ±45.0) um` (`0.0 um` overlap)
     """
     u = pattern_option.strip().upper()
+    if "OPTION5" in u or "OPT5" in u or "90UM" in u or "INTERSTITIAL" in u:
+        return [(-45.0, -45.0), (45.0, -45.0), (-45.0, 45.0), (45.0, 45.0)]
+    if "OPTION4" in u or "OPT4" in u or "CENTER" in u or "ZERO" in u or "0_OVERLAP" in u or "TANGENT" in u:
+        return [(-45.5, -45.5), (45.5, -45.5), (-45.5, 45.5), (45.5, 45.5)]
     if "1" in u or "4VIA" in u or "SQUARE" in u or "2X2" in u:
         return [(-110.0, -110.0), (110.0, -110.0), (-110.0, 110.0), (110.0, 110.0)]
     if "2" in u or "5VIA" in u or "QUINCUNX" in u:
@@ -891,6 +898,59 @@ def render_3_bga_via_options_comparison_svg(
     return str(out_svg)
 
 
+def render_4_bga_via_options_comparison_svg(
+    plan_opt1: Dict[str, Any],
+    plan_opt2: Dict[str, Any],
+    plan_opt3: Dict[str, Any],
+    plan_opt4: Dict[str, Any],
+    out_svg: Path,
+) -> str:
+    """Render a 2400x1240 4-panel SVG comparing Option 1 (4-Via 2x2), Option 2 (5-Via Quincunx), Option 3 (6-Via Hex Ring), and Option 4 (4-Via Center ~0 Overlap)."""
+    W, H = 2400, 1240
+    svg: List[str] = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="100%" height="100%" style="background:#020617;">',
+        f'<rect x="0" y="0" width="{W}" height="{H}" fill="#020617"/>',
+        '<text x="30" y="42" fill="#f8fafc" font-family="Segoe UI, Arial, sans-serif" font-size="24" font-weight="bold">'
+        'Step 5: Bottom (BASE) Layer — All Power &amp; VSS BGA Via Cluster Options (12B -&gt; BASE, Options 1..4)'
+        '</text>',
+        '<text x="30" y="68" fill="#38bdf8" font-family="Consolas, monospace" font-size="13.5">'
+        '4 Selectable BGA Patterns (All VDD + VSS BGAs): Opt1=4-Via (±110), Opt2=5-Via Quincunx, Opt3=6-Via Ring, Opt4=4-Via Center (~0 Overlap, ±45.5um, 91um pitch)'
+        '</text>',
+    ]
+    pw = 576.0
+    ph = 1005.0
+    specs = [
+        (plan_opt1, "OPT 1: 4-Via 2x2 (±110um)", "220um pitch | Spread BGA Cluster"),
+        (plan_opt2, "OPT 2: 5-Via Quincunx", "(0,0) + (±135um) | Balanced I/L"),
+        (plan_opt3, "OPT 3: 6-Via Hex Ring", "R=195um Ring | Max Current Cap"),
+        (plan_opt4, "OPT 4: 4-Via Center (~0 Overlap)", "(±45.5, ±45.5)um | 91um pitch | 1um Gap"),
+    ]
+    for idx, (pl, t, sub) in enumerate(specs):
+        svg.extend(
+            _render_zoomed_pocket_and_bga_via_panel_svg(
+                plan=pl,
+                panel_x=20.0 + idx * (pw + 18.0),
+                panel_y=90.0,
+                panel_w=pw,
+                panel_h=ph,
+                tile_bbox=ZOOM_POCKET_BBOX,
+                title=t,
+                subtitle=sub,
+            )
+        )
+    svg.append(
+        '<text x="30" y="1148" fill="#cbd5e1" font-family="Consolas, monospace" font-size="13">'
+        'Option 4 places 4 V90_65_90_12B_BASE_01A (r=45.0um) vias at exact center (±45.5, ±45.5)um -> 91.0um c-to-c pitch, +1.0um edge gap (0.0um pad overlap) on ALL VDD &amp; VSS BGAs.'
+        '</text>'
+    )
+    svg.append("</svg>")
+    svg_str = "\n".join(svg)
+    ET.fromstring(svg_str)
+    out_svg.parent.mkdir(parents=True, exist_ok=True)
+    out_svg.write_text(svg_str, encoding="utf-8")
+    return str(out_svg)
+
+
 def export_base_lsc_bga_recipe(plan: Dict[str, Any], out_txt: Path) -> str:
     """Export pipe-delimited Stage 4 SKILL recipe for BASE LSC symbols, LSC pad vias, and BGA cluster vias."""
     lines: List[str] = [
@@ -1321,8 +1381,13 @@ def render_3_options_overlaid_on_pth_comparison_svg(
 def run_base_lsc_bga_suite(
     sro_to_sro_min_um: float = 175.0,
 ) -> Dict[str, Any]:
+    try:
+        from agent04_pdn_architect.cad_cli.pdn_paths import resolve_output_dir
+    except ImportError:
+        from pdn_paths import resolve_output_dir  # type: ignore
+
     ws = Path(__file__).resolve().parent.parent.parent
-    out_dir = ws / "pdn_sandbox"
+    out_dir = resolve_output_dir("pdn_sandbox")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Evaluate all 3 BGA Via Pattern Options at user sro_to_sro_min_um (default 175um max packing) AND 250um
@@ -1397,6 +1462,13 @@ def run_base_lsc_bga_suite(
             "recipe_file": rcp_p,
         }
 
+    pl_opt4 = synthesize_base_pockets_lscs_and_bga_vias(ws, "OPTION4_4VIA_CENTER_ZERO_OVERLAP", sro_to_sro_min_um=sro_to_sro_min_um)
+    svg_opt4 = render_single_base_option_svg(pl_opt4, out_dir / "mockup_BASE_Option4_4Via_CenterZeroOverlap_Full_and_Zoom.svg")
+    svg_cmp4 = render_4_bga_via_options_comparison_svg(
+        pl_opt1, pl_opt2, pl_opt3, pl_opt4, out_dir / "mockup_BASE_LSC_Pockets_and_4_BGA_Via_Options_Comparison.svg"
+    )
+    rcp_opt4 = export_base_lsc_bga_recipe(pl_opt4, out_dir / "mockup_BASE_Option4_4Via_CenterZeroOverlap_recipe.txt")
+
     summary = {
         "status": "SUCCESS",
         "step": "STEP3_BASE_LSC_POCKET_AND_BGA_VIA_ROUTER",
@@ -1404,6 +1476,7 @@ def run_base_lsc_bga_suite(
         "option_1_4via_square_2x2": _clean_summary(pl_opt1, svg_opt1, rcp_opt1),
         "option_2_5via_quincunx": _clean_summary(pl_opt2, svg_opt2, rcp_opt2),
         "option_3_6via_hex_ring": _clean_summary(pl_opt3, svg_opt3, rcp_opt3),
+        "option_4_4via_center_zero_overlap": _clean_summary(pl_opt4, svg_opt4, rcp_opt4),
         "sro_250um_rule_comparison": {
             "sro_to_sro_rule_um": 250.0,
             "maximized_total_lscs": pl_250["maximized_total_lscs"],
@@ -1412,6 +1485,7 @@ def run_base_lsc_bga_suite(
             "pocket_breakdown": pl_250["pocket_breakdown"],
         },
         "comparison_3panel_svg": svg_cmp,
+        "comparison_4panel_svg": svg_cmp4,
         "base_overlaid_on_pth_svgs": {
             "comparison_3panel_on_pth_svg": svg_on_pth_cmp,
             "option_1_on_pth_svg": svg_on_pth_opt1,

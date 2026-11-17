@@ -20,7 +20,7 @@ description: >
 
 ## 1. Mission & 4-Stage Architecture
 
-`agent04_pdn_architect` automates full-stackup Power Distribution Network (PDN) synthesis from `SURFACE` die bumps down to `BASE` BGA balls and Land-Side Capacitors (LSCs) without ever modifying `G:\My Drive\skill_source\SPB_Data\pcbenv\`.
+`agent04_pdn_architect` automates full-stackup Power Distribution Network (PDN) synthesis from `SURFACE` die bumps down to `BASE` BGA balls and Land-Side Capacitors (LSCs) without ever modifying `<pcbenv_skill_dir>/`.
 
 ```
 +---------------------------------------------------------------------------------------------------+
@@ -70,9 +70,9 @@ description: >
 
 ---
 
-## 2. Source SKILL `.il` Mapping (`G:\My Drive\skill_source\SPB_Data\pcbenv\`)
+## 2. Source SKILL `.il` Mapping (`<pcbenv_skill_dir>/`)
 
-All original `.il` files in `G:\My Drive\skill_source\SPB_Data\pcbenv\` remain **100% untouched**. Their algorithms are consolidated into headless batch modules under `agent04_pdn_architect/scripts/`:
+All original `.il` files in `<pcbenv_skill_dir>/` remain **100% untouched**. Their algorithms are consolidated into headless batch modules under `agent04_pdn_architect/scripts/`:
 
 | Zone / Stage | Source `.il` Files in `pcbenv` | Refactored Headless Module | Key Capabilities |
 | :--- | :--- | :--- | :--- |
