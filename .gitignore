@@ -98,8 +98,15 @@ __pycache__/
 *$py.class
 *.so
 .venv/
+.venv_linux/
 venv/
 env/
+AIstudio/workspaces/
+agent04_pdn_architect/stage1_inputs/
+agent04_pdn_architect/MCM_test/
+agent04_pdn_architect/pdn_sandbox/
+agent04_pdn_architect/reports/
+agent04_pdn_architect/svg_sandbox/
 node_modules/
 .pytest_cache/
 .coverage

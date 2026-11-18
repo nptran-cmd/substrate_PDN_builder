@@ -2,7 +2,7 @@
   "_template_doc": {
     "title": "Task 2 — Full 27-Layer Co-Planar Dual-Rail PDN Design Template: LDA Compute (VDDC0..3 + VDD_0P8_SRAM_CC0..3 on U9, U12, U88, U10)",
     "how_to_use": [
-      "1. Edit any parameter below (target LDA RefDes/nets, L01 SURFACE 3:1 Partial VIP + 15um Vertical C-Jog/S-Jog vs FULL mode, L01..L27 co-planar VDDC/SRAM split gaps & Dynamic/Static modes, 96-pin N24792-018 eDTC rules, Core PTH pitches, 9F->5F & 9B->5B stitch pitch, 8-via BGA octagon radius, or BASE curved recess & co-pocket 180-deg LSC rules).",
+      "1. Edit any parameter below (target LDA RefDes/nets, L01 SURFACE 3:1 Partial VIA + 15um Vertical C-Jog/S-Jog vs FULL mode, L01..L27 co-planar VDDC/SRAM split gaps & Dynamic/Static modes, 96-pin N24792-018 eDTC rules, Core PTH pitches, 9F->5F & 9B->5B stitch pitch, 8-via BGA octagon radius, or BASE curved recess & co-pocket 180-deg LSC rules).",
       "2. Compile & validate all 27 layers: python -m agent04_pdn_architect.templates.pdn_27layer_template_runner --config agent04_pdn_architect/templates/task2_vddc_sram_27layer_template.json",
       "3. Inspect generated SVGs + Layer Summary JSON in agent04_pdn_architect/reports/template_builds/task2_vddc_sram/, then run the generated *_run_apd_headless.bat (or add --build-mcm) to produce a new .mcm database."
     ]
@@ -81,12 +81,12 @@
       "allowed_surface_modes": [
         "PARTIAL_3_TO_1_VERTICAL_C_S_JOG",
         "PARTIAL_3_TO_1_HORIZONTAL_COLLAR",
-        "FULL_VIP"
+        "FULL_VIA"
       ],
-      "vdd_to_vss_vip_ratio": "3:1",
-      "apply_partial_vip_to_both_vddc_and_sram": true,
-      "target_vdd_vip_fraction_pct": 75.0,
-      "target_vss_vip_fraction_pct": 25.0,
+      "vdd_to_vss_via_ratio": "3:1",
+      "apply_partial_via_to_both_vddc_and_sram": true,
+      "target_vdd_via_fraction_pct": 75.0,
+      "target_vss_via_fraction_pct": 25.0,
       "vertical_jog_trace_width_um": 15.0,
       "min_cline_to_pad_gap_um": 18.0,
       "sram_10f_backbone_strap_width_um": 18.0
@@ -148,11 +148,11 @@
     }
   },
   "stackup_all_27_layers": [
-    { "order": 1,  "layer": "SURFACE", "cu_um": 17.0, "mode": "PARTIAL_3_TO_1_VERTICAL_JOG", "shape_type": "CLINE_AND_PADS",             "nets": ["VDDC0", "VDD_0P8_SRAM_CC0", "VSS"], "split_gap_um": 18.0, "notes": "75% VIP on VDDC0 & SRAM_CC0, 25% VIP on VSS + 15um Vertical C-Jogs & S-Jogs; C18 EMIB uBumps drop to C0" },
+    { "order": 1,  "layer": "SURFACE", "cu_um": 17.0, "mode": "PARTIAL_3_TO_1_VERTICAL_JOG", "shape_type": "CLINE_AND_PADS",             "nets": ["VDDC0", "VDD_0P8_SRAM_CC0", "VSS"], "split_gap_um": 18.0, "notes": "75% VIA on VDDC0 & SRAM_CC0, 25% VIA on VSS + 15um Vertical C-Jogs & S-Jogs; C18 EMIB uBumps drop to C0" },
     { "order": 2,  "layer": "C0",      "cu_um": 8.0,  "mode": "EMIB_BRIDGE_VSS_ONLY",        "shape_type": "DYNAMIC",                    "nets": ["VSS"],                              "split_gap_um": 18.0, "notes": "Strictly inside U25, U29, U32, U28, U39 EMIB outlines (0 C0 copper outside bridges)" },
-    { "order": 3,  "layer": "12F",     "cu_um": 15.0, "mode": "DEDICATED_VDDC_PLANE",        "shape_type": "DYNAMIC",                    "nets": ["VDDC0"],                            "split_gap_um": 50.0, "notes": "Immediate 1-stack VIP capture for VDDC0; 157.5um EMIB KOZs voided" },
-    { "order": 4,  "layer": "11F",     "cu_um": 15.0, "mode": "DEDICATED_VSS_PLANE",         "shape_type": "DYNAMIC",                    "nets": ["VSS"],                              "split_gap_um": 50.0, "notes": "Immediate 2-stack VIP capture for VSS; 157.5um EMIB KOZs voided" },
-    { "order": 5,  "layer": "10F",     "cu_um": 15.0, "mode": "SRAM_COLLECTOR_PLUS_WINDOW",  "shape_type": "DYNAMIC_PLUS_STATIC_GUARD",  "nets": ["VDD_0P8_SRAM_CC0", "VDDC0", "VSS"], "split_gap_um": 50.0, "notes": "3-stack VIP collector for SRAM_CC0 + East VDDC0 window + Static 150um EMIB guard rings + 10F CSBVSS escape" },
+    { "order": 3,  "layer": "12F",     "cu_um": 15.0, "mode": "DEDICATED_VDDC_PLANE",        "shape_type": "DYNAMIC",                    "nets": ["VDDC0"],                            "split_gap_um": 50.0, "notes": "Immediate 1-stack VIA capture for VDDC0; 157.5um EMIB KOZs voided" },
+    { "order": 4,  "layer": "11F",     "cu_um": 15.0, "mode": "DEDICATED_VSS_PLANE",         "shape_type": "DYNAMIC",                    "nets": ["VSS"],                              "split_gap_um": 50.0, "notes": "Immediate 2-stack VIA capture for VSS; 157.5um EMIB KOZs voided" },
+    { "order": 5,  "layer": "10F",     "cu_um": 15.0, "mode": "SRAM_COLLECTOR_PLUS_WINDOW",  "shape_type": "DYNAMIC_PLUS_STATIC_GUARD",  "nets": ["VDD_0P8_SRAM_CC0", "VDDC0", "VSS"], "split_gap_um": 50.0, "notes": "3-stack VIA collector for SRAM_CC0 + East VDDC0 window + Static 150um EMIB guard rings + 10F CSBVSS escape" },
     { "order": 6,  "layer": "9F",      "cu_um": 15.0, "mode": "DEDICATED_VSS_PLANE",         "shape_type": "DYNAMIC",                    "nets": ["VSS"],                              "split_gap_um": 50.0, "notes": "1-stack 10F->9F EMIB VSS CSB collector & top anchor of 9F->5F VSS stitch" },
     { "order": 7,  "layer": "8F",      "cu_um": 15.0, "mode": "DEDICATED_VDDC_PLANE",        "shape_type": "DYNAMIC",                    "nets": ["VDDC0"],                            "split_gap_um": 50.0, "notes": "Full-domain VDDC0 lateral spreading plane" },
     { "order": 8,  "layer": "7F",      "cu_um": 15.0, "mode": "DEDICATED_VSS_PLANE",         "shape_type": "DYNAMIC",                    "nets": ["VSS"],                              "split_gap_um": 50.0, "notes": "Mid-BU VSS shield plane in 9F->5F trunk" },

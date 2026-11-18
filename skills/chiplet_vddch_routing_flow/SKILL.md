@@ -2,7 +2,7 @@
 name: chiplet_vddch_routing_flow
 description: >
   End-to-End 8-Step PDN Routing Flow for the Chiplet (VDDCH0..3 + VSS) Rail Group on LDC dies
-  (U2, U4, U3, U1), covering Surface ratio/full VIP (Step 1), Front BU 6F/7F transition (Step 2),
+  (U2, U4, U3, U1), covering Surface ratio/full VIA (Step 1), Front BU 6F/7F transition (Step 2),
   Core PTH 4..11/mm2 + eDTC KOZ/Guard Metal (Step 3), PP 1/2/4-via + DR audit (Step 4), BGA
   Options 1..4 incl. 0-overlap center 4-via (Step 5), LSC + curved L-pocket recess (Step 6),
   Back BU 6B/7B cluster climb (Step 7), and Transition-to-PP/Core zero-overlap bridge (Step 8).

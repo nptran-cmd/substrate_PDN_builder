@@ -9,9 +9,9 @@
   },
   "u9_reference_learned_metrics": {
     "surface_c4_bumps": {
-      "VDDC0":            { "bumps": 10664, "padstack": "C35_21_DP_01A", "vias_surface_to_12f": 10515, "vip_pct": 98.60, "surface_straps": 385, "strap_width_um": 50.0 },
-      "VDD_0P8_SRAM_CC0": { "bumps": 1007,  "padstack": "C35_21_DP_01A", "vias_surface_to_12f": 1007,  "vip_pct": 100.0, "surface_straps": 0,   "note": "100% 3-stacked SURFACE->12F->11F->10F directly into dedicated 10F SRAM plane" },
-      "VSS":              { "bumps": 16797, "padstacks": { "C35_21_DP_01A": 11803, "C18_6_DP_01A": 4994 }, "vias_surface_to_12f": 12246, "vip_pct": 72.91, "emib_vias_surface_to_c0": "VU30_19_35_SURFACE_C0_01B", "surface_strap_widths_um": [14.0, 50.0] }
+      "VDDC0":            { "bumps": 10664, "padstack": "C35_21_DP_01A", "vias_surface_to_12f": 10515, "via_pct": 98.60, "surface_straps": 385, "strap_width_um": 50.0 },
+      "VDD_0P8_SRAM_CC0": { "bumps": 1007,  "padstack": "C35_21_DP_01A", "vias_surface_to_12f": 1007,  "via_pct": 100.0, "surface_straps": 0,   "note": "100% 3-stacked SURFACE->12F->11F->10F directly into dedicated 10F SRAM plane" },
+      "VSS":              { "bumps": 16797, "padstacks": { "C35_21_DP_01A": 11803, "C18_6_DP_01A": 4994 }, "vias_surface_to_12f": 12246, "via_pct": 72.91, "emib_vias_surface_to_c0": "VU30_19_35_SURFACE_C0_01B", "surface_strap_widths_um": [14.0, 50.0] }
     },
     "edtc_4fco_sharing": {
       "symbol_name": "N24792-018_LIVE_BUG_4FCO_02A",

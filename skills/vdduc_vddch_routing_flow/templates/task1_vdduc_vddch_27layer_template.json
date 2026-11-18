@@ -2,7 +2,7 @@
   "_template_doc": {
     "title": "Task 1 — Full 27-Layer PDN Design Template: Core Compute (VDDUC* on LDB U7..U5) & Chiplet/Hub (VDDCH* on LDC U2..U1)",
     "how_to_use": [
-      "1. Edit any parameter below (target RefDes/nets, L01 SURFACE VIP ratio & strap mode, per-layer L01..L27 polarity/shape_mode/split_gap_um, real eDTC catalog, Core PTH density, 9F->5F & 9B->5B stitch pitch, or BASE curved recess & 180-deg LSC rules).",
+      "1. Edit any parameter below (target RefDes/nets, L01 SURFACE VIA ratio & strap mode, per-layer L01..L27 polarity/shape_mode/split_gap_um, real eDTC catalog, Core PTH density, 9F->5F & 9B->5B stitch pitch, or BASE curved recess & 180-deg LSC rules).",
       "2. Compile & validate all 27 layers: python -m agent04_pdn_architect.templates.pdn_27layer_template_runner --config agent04_pdn_architect/templates/task1_vdduc_vddch_27layer_template.json",
       "3. Inspect generated SVGs + Layer Summary JSON in agent04_pdn_architect/reports/template_builds/task1_vdduc_vddch/, then run the generated *_run_apd_headless.bat (or add --build-mcm) to produce a new .mcm database."
     ]
@@ -79,7 +79,7 @@
   },
   "zone_routing_parameters": {
     "zone1_surface_escape": {
-      "surface_vip_ratio": "FULL",
+      "surface_via_ratio": "FULL",
       "allowed_ratio_choices": ["FULL", "3:1", "4:2", "5:2"],
       "strap_direction": "VERTICAL",
       "allowed_direction_choices": ["VERTICAL", "HORIZONTAL", "BOTH"],
@@ -149,7 +149,7 @@
     }
   },
   "stackup_all_27_layers": [
-    { "order": 1,  "layer": "SURFACE", "cu_um": 17.0, "mode": "ROUTING_BUMP_ESCAPE",  "shape_type": "CLINE_AND_PADS", "nets": ["VDDUC0", "VDDCH0", "VSS"], "split_gap_um": 18.0, "notes": "C4 VIP escape + 24um M:N vertical/horizontal straps; EMIB uBumps drop to C0" },
+    { "order": 1,  "layer": "SURFACE", "cu_um": 17.0, "mode": "ROUTING_BUMP_ESCAPE",  "shape_type": "CLINE_AND_PADS", "nets": ["VDDUC0", "VDDCH0", "VSS"], "split_gap_um": 18.0, "notes": "C4 VIA escape + 24um M:N vertical/horizontal straps; EMIB uBumps drop to C0" },
     { "order": 2,  "layer": "C0",      "cu_um": 8.0,  "mode": "EMIB_BRIDGE_ONLY",     "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 18.0, "notes": "Strictly inside EMIB die outline only (0 C0 copper outside bridges)" },
     { "order": 3,  "layer": "12F",     "cu_um": 15.0, "mode": "DEDICATED_POWER_PLANE","shape_type": "DYNAMIC",        "nets": ["VDDUC0", "VDDCH0"],        "split_gap_um": 50.0, "notes": "157.5um EMIB cavity+pad KOZ voided" },
     { "order": 4,  "layer": "11F",     "cu_um": 15.0, "mode": "DEDICATED_VSS_PLANE",  "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 50.0, "notes": "157.5um EMIB cavity+pad KOZ voided" },

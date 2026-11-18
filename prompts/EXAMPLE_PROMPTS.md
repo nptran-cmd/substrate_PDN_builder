@@ -14,7 +14,7 @@ Copy and paste any of the prompts below into your AI agent session (**Gemini CLI
 | **4** | [Co-Resident Dual-Rail `VDDC*` + `VDDSRAM*` Flow](#4-co-resident-dual-rail-compute-dies-vddc03--vdd_0p8_sram_cc03) | `vddc_vddram_routing_flow` | All 27 Layers | Carved W/E `SRAM` islands, `10F` bridge backbone, `3:1` jog straps |
 | **5** | [`HBM4E` 4-Rail + `HBMPHY` + `EMIB` 27-Layer Flow](#5-hbm4e-multi-rail-vddq-vddc-vddql-vpp-hbmphy--emib-routing) | `hbm_vdd_routing_flow` | All 27 Layers | West `SURFACE` gang-bars, East `EMIB` `C0`, `10F CSB` dogbones |
 | **6** | [`BASE` (`L27`) Curved Recess Cavity & `180°` `0201` LSCs](#6-base-l27-curved-mechanical-recess-cavity--180-0201-lsc-placement) | `base_lsc_bga_routing` | `10B..BASE` + `LSC_CAVITY` | `R=500 um` filleted cavities, `CONDUCTOR/BASE` LSCs, BGA clusters |
-| **7** | [Layer 1 (`SURFACE`) Bump-Via Ratio & Strapping Sweep](#7-layer-1-surface-parameterized-bump-via-ratios--strapping-directions) | `surface_layer1_routing` | `SURFACE` (`L01`) → `12F` (`L03`) | `FULL`, `4:2`, `5:2`, `3:1` VIP + `H`/`V`/`BOTH` 24 um straps |
+| **7** | [Layer 1 (`SURFACE`) Bump-Via Ratio & Strapping Sweep](#7-layer-1-surface-parameterized-bump-via-ratios--strapping-directions) | `surface_layer1_routing` | `SURFACE` (`L01`) → `12F` (`L03`) | `FULL`, `4:2`, `5:2`, `3:1` VIA + `H`/`V`/`BOTH` 24 um straps |
 | **8** | [Core `PTH` (`4FCO ↔ 4BCO`) Density & `eDTC` KOZ Sweep](#8-core-pth-4fco--4bco-density-sweep--real-multi-family-edtc-koz) | `pth_4fco_4bco_routing` | `6F..4FCO` ↔ `4BCO..6B` | `5..8 PTH/mm²`, Staggered vs `90°` Ortho H/V, `eDTC` KOZ voids |
 | **9** | [Multi-Rail Co-Planar Polygon Splitter & Stack Pruner](#9-multi-rail-co-planar-polygon-splitter--atomic-via-stack-pruner) | `multi_rail_plane_polygon_splitter` | `12F` (`L03`) → `12B` (`L26`) | Dynamic planes, Static `150 um` guard bands, `0` dangling vias |
 | **10** | [Zero-Via-Overlap (`27` Layers) & `9F→5F`/`9B→5B` Audit](#10-strict-zero-via-overlap-27-conductor-layers--vertical-continuity-audit) | `full_package_all_dies_pdn.py` | All 27 Conductor Layers | Per-conductor pad clearance audit (`0` overlaps) & trunk check |
@@ -81,12 +81,12 @@ $env:PYTHONPATH="."; python -m agent04_pdn_architect.cad_cli.upper_left_corner_p
 
 ## 3. Single-Rail `VDDUC*` (`U5..U8`) & `VDDCH*` (`U1..U4`) 27-Layer PDN Routing
 
-**What it does:** Executes the `vdduc_vddch_routing_flow` skill across all 27 layers (`SURFACE` `L01` → `BASE` `L27`) for any `LDB` (`U7: VDDUC0`, `U5: VDDUC1`, `U8: VDDUC2`, `U6: VDDUC3`) or `LDC` (`U2: VDDCH0`, `U4: VDDCH1`, `U3: VDDCH2`, `U1: VDDCH3`) die, including `100%` `SURFACE` VIP + `VSS` perimeter collar, `9F->5F` and `9B->5B` middle-buildup stitch trunks, concentric `4FCO` `eDTC` stacks, Core `PTH`/`PP` columns, and `BASE` curved recess `0201` LSCs.
+**What it does:** Executes the `vdduc_vddch_routing_flow` skill across all 27 layers (`SURFACE` `L01` → `BASE` `L27`) for any `LDB` (`U7: VDDUC0`, `U5: VDDUC1`, `U8: VDDUC2`, `U6: VDDUC3`) or `LDC` (`U2: VDDCH0`, `U4: VDDCH1`, `U3: VDDCH2`, `U1: VDDCH3`) die, including `100%` `SURFACE` VIA + `VSS` perimeter collar, `9F->5F` and `9B->5B` middle-buildup stitch trunks, concentric `4FCO` `eDTC` stacks, Core `PTH`/`PP` columns, and `BASE` curved recess `0201` LSCs.
 
 ### Copy-Paste Prompts:
 
 ```text
-Use the `vdduc_vddch_routing_flow` skill to route the full 27-layer PDN for U7 (VDDUC0 and VSS) and U2 (VDDCH0 and VSS) with 100% SURFACE VIP, concentric 4FCO eDTC stacks, unbroken 9F->5F / 9B->5B trunks, and 180-degree alternating CONDUCTOR/BASE LSCs.
+Use the `vdduc_vddch_routing_flow` skill to route the full 27-layer PDN for U7 (VDDUC0 and VSS) and U2 (VDDCH0 and VSS) with 100% SURFACE VIA, concentric 4FCO eDTC stacks, unbroken 9F->5F / 9B->5B trunks, and 180-degree alternating CONDUCTOR/BASE LSCs.
 ```
 
 ```text
@@ -154,12 +154,12 @@ $env:PYTHONPATH="."; python -m agent04_pdn_architect.cad_cli.curved_recess_and_l
 
 ## 7. Layer 1 (`SURFACE`) Parameterized Bump-Via Ratios & Strapping Directions
 
-**What it does:** Routes any die on `SURFACE` (`L01`) with either **Full Via-on-Bump (`FULL` 100% VIP)** or any user-specified **`M:N` (`VDD:VSS`) bump-via ratio** (`4:2`, `5:2`, `3:1`) and strapping direction (`HORIZONTAL`, `VERTICAL`, or `BOTH` 2D orthogonal grid), strapping un-via'd bumps to adjacent same-net via'd bumps with `24 um` `SURFACE` `CLINE` traces while maintaining `>=16.5 um` edge-to-edge clearance to opposite-net bumps.
+**What it does:** Routes any die on `SURFACE` (`L01`) with either **Full Via-on-Bump (`FULL` 100% VIA)** or any user-specified **`M:N` (`VDD:VSS`) bump-via ratio** (`4:2`, `5:2`, `3:1`) and strapping direction (`HORIZONTAL`, `VERTICAL`, or `BOTH` 2D orthogonal grid), strapping un-via'd bumps to adjacent same-net via'd bumps with `24 um` `SURFACE` `CLINE` traces while maintaining `>=16.5 um` edge-to-edge clearance to opposite-net bumps.
 
 ### Copy-Paste Prompts:
 
 ```text
-Use the `surface_layer1_routing` skill on U7 (VDDUC0 and VSS) to compare 100% Full VIP against a 5:2 VDD:VSS bump-via ratio with HORIZONTAL, VERTICAL, and BOTH 2D 24 um SURFACE strapping, and generate side-by-side comparison SVGs.
+Use the `surface_layer1_routing` skill on U7 (VDDUC0 and VSS) to compare 100% Full VIA against a 5:2 VDD:VSS bump-via ratio with HORIZONTAL, VERTICAL, and BOTH 2D 24 um SURFACE strapping, and generate side-by-side comparison SVGs.
 ```
 
 ```text

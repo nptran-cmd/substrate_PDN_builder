@@ -2,7 +2,7 @@
 name: step1_surface_bump_routing
 description: >
   Step 1 PDN Routing Skill (All Rail Groups: Core VDDC/SRAM, Uncore VDDUC, Chiplet VDDCH, HBM):
-  Routes C4 die bumps on SURFACE (TOP / 12Cu) with either FULL via-in-pad (100% VIP) or any
+  Routes C4 die bumps on SURFACE (TOP / 12Cu) with either FULL via-in-pad (100% VIA) or any
   user-specified VDD:VSS ratio (e.g., 4:2, 5:2, 3:1, M:N) and strapping direction
   (VERTICAL, HORIZONTAL, BOTH), jogging/strapping every floating bump to an adjacent via'd
   same-net neighbor (0 floating bumps, >= 18.0 um SURFACE trace clearance).

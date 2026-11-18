@@ -3,7 +3,7 @@ name: surface_layer1_routing
 description: >
   Layer 1 (SURFACE / TOP) Parameterized Die Bump-Via & Trace-Ganging Skill for
   Agent 04 (PDN Architect). Routes any target RefDes (e.g., U7) on SURFACE (12Cu)
-  with either Full Via-on-Bump (100% VIP) or any user-specified M:N VDD:VSS via
+  with either Full Via-on-Bump (100% VIA) or any user-specified M:N VDD:VSS via
   ratio (e.g., 4:2, 5:2, 3:1) and strapping direction (VERTICAL, HORIZONTAL, or
   BOTH 2D H+V), connecting un-via'd bumps to adjacent same-net via'd bumps via
   DRC-clean 24um SURFACE CLINE straps, exporting XML-validated SVGs and

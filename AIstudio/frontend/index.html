@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Substrate AI Design Studio — 1. PDN builder</title>
+  <meta name="description" content="Substrate AI Design Studio featuring A-to-Z PDN Architect workflows, live SVG viewer, Prompt Composer, and integrated bottom Jetski terminal." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/vendor/xterm.css" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar" id="studioTopbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+        <rect x="2" y="2" width="20" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M6 8h5l2 3h5M6 16h4l3-4h5" fill="none" stroke="#d89b56" stroke-width="1.7" stroke-linecap="round"/>
+        <circle cx="6" cy="8" r="1.5" fill="#d89b56"/>
+        <circle cx="18" cy="12" r="1.5" fill="#d89b56"/>
+        <circle cx="6" cy="16" r="1.5" fill="currentColor"/>
+      </svg>
+      <h1>Substrate AI Design Studio</h1>
+    </div>
+
+    <div class="working-folder-bar" aria-label="Working Folder Selector">
+      <label class="wf-label" for="workDirInput">Working Folder</label>
+      <input
+        type="text"
+        id="workDirInput"
+        class="wf-input"
+        spellcheck="false"
+        title="Working folder with MCM templates and output path (press Enter to apply)"
+      />
+      <button type="button" id="btnApplyWorkDir" class="btn-ghost" title="Apply typed path">Apply</button>
+      <button type="button" id="btnBrowseWorkDir" class="btn-copper-outline" title="Open Windows folder picker for MCM templates & outputs">Browse...</button>
+      <button type="button" id="btnFolderModal" class="btn-ghost" title="Browse folders inside browser">Folders</button>
+      <input type="file" id="mcmUploadInput" accept=".mcm" style="display:none;" />
+      <button type="button" id="btnUploadMcm" class="btn-ghost" title="Upload .mcm file to active MCM_template folder">Upload .mcm</button>
+      <button type="button" id="btnOutputsModal" class="btn-ghost" title="List and download generated .mcm, .svg, and .csv outputs">Outputs</button>
+      <button type="button" id="btnResetWorkDir" class="btn-ghost" title="Reset back to Agent repo root" style="display:none;">Reset</button>
+      <span id="workTemplatesMeta" class="wf-meta" title="Detected .mcm templates in working folder"></span>
+    </div>
+  </header>
+
+  <main class="studio-layout" id="studioWorkspace">
+    <!-- Top Section Tab Bar: 1. PDN builder only for now -->
+    <div class="controls-bar">
+      <nav class="category-tabs" id="categoryTabs" aria-label="Studio Modules"></nav>
+    </div>
+
+    <!-- Main 2-Pane Split: Left = A-to-Z PDN Architect Functions | Right = Live SVG Viewer -->
+    <section class="studio-split" aria-label="PDN Builder Workspace">
+      <div class="pdn-functions-pane" aria-label="PDN Architect Functions A to Z">
+        <div class="pane-header">
+          <span class="pane-title">PDN Architect Functions (A&ndash;Z)</span>
+          <span class="pane-meta" id="pdnCountLabel">12 modules</span>
+        </div>
+        <div class="prompt-list" id="promptList" role="list"></div>
+      </div>
+
+      <div class="svg-viewer-pane" aria-label="Live SVG Preview">
+        <div class="svg-toolbar">
+          <span class="pane-title">SVG Preview</span>
+          <select id="svgSelect" class="svg-select" title="Select generated PDN SVG file"></select>
+          <button type="button" id="btnAutoWatchSvg" class="btn-watch active" title="Automatically reload/switch when SVG files change on disk">
+            Auto-Watch
+          </button>
+          <button type="button" id="btnRefreshSvg" class="btn-ghost" title="Reload selected SVG now">
+            Refresh
+          </button>
+          <div class="zoom-controls">
+            <button type="button" id="btnZoomOut" class="btn-ghost" title="Zoom out">-</button>
+            <button type="button" id="btnZoomFit" class="btn-ghost" title="Fit SVG to panel">Fit</button>
+            <button type="button" id="btnZoomIn" class="btn-ghost" title="Zoom in">+</button>
+            <span id="svgZoomLabel" class="dim-readout">Fit</span>
+          </div>
+        </div>
+        <div class="svg-stage" id="svgStage">
+          <img id="svgPreviewImg" class="svg-preview-img" alt="Selected PDN SVG diagram" draggable="false" />
+          <div id="svgEmptyMsg" class="svg-empty" style="display:none;">No SVG selected or available yet.</div>
+        </div>
+        <div class="svg-statusbar">
+          <span id="svgFileLabel" class="svg-file-label">Loading SVGs...</span>
+          <span id="svgWatchStatus" class="svg-watch-status">Watching for file changes</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Prompt Composer -->
+    <section class="composer" aria-label="Prompt Composer">
+      <div class="composer-top">
+        <label for="composerInput" class="composer-title">Prompt Composer</label>
+        <span id="dispatchFeedback" class="dispatch-feedback" aria-live="polite">Ready &mdash; Ctrl+Enter to run in Jetski terminal</span>
+      </div>
+      <div class="composer-row">
+        <textarea
+          id="composerInput"
+          class="composer-textarea"
+          rows="2"
+          placeholder="Click Edit on any A-Z PDN function above or type a custom prompt for Jetski... (Ctrl+Enter to run)"
+        ></textarea>
+        <div class="composer-side">
+          <div class="mode-group" id="modeGroup" role="radiogroup" aria-label="Execution Mode">
+            <button type="button" class="mode-pill active" data-mode="auto" title="Inject if Jetski is running, else launch jetski -i">Auto</button>
+            <button type="button" class="mode-pill" data-mode="jetski_interactive" title="Run via jetski -i '<prompt>'">Jetski -i</button>
+            <button type="button" class="mode-pill" data-mode="inject" title="Type directly into current terminal stdin">Inject</button>
+            <button type="button" class="mode-pill" data-mode="jetski_print" title="One-shot non-interactive jetski -p">Print -p</button>
+            <button type="button" class="mode-pill" data-mode="shell" title="Execute direct CLI command or shell text">Shell</button>
+          </div>
+          <div class="composer-submit-row">
+            <button type="button" id="sendDirectBtn" class="btn-copper-outline" title="Execute selected module directly in Python / Cadence APD on server without Jetski">Run Direct</button>
+            <button type="button" id="sendComposerBtn" class="btn-primary">Run in Terminal</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom Terminal Dock (~1/8 screen height, full width, resizable) -->
+    <section class="terminal-dock" id="terminalDock" aria-label="Integrated Jetski Terminal">
+      <div class="dock-resizer" id="dockResizer" title="Drag to resize terminal height"></div>
+      <div class="terminal-toolbar">
+        <div class="tabs-bar" id="sessionTabs" role="tablist"></div>
+        <button type="button" id="newTabBtn" class="btn-ghost" title="Open new ConPTY terminal tab">+ Tab</button>
+
+        <div class="toolbar-spacer"></div>
+
+        <div class="terminal-actions">
+          <button type="button" id="btnLaunchJetski" class="btn-copper-outline" title="Start interactive Jetski CLI in terminal">
+            Launch Jetski
+          </button>
+          <button type="button" id="btnLoginOAuth" class="btn-ghost" title="Start standalone OAuth login or run /login inside Jetski">
+            Login (Browser)
+          </button>
+          <button type="button" id="btnLoginLoas" class="btn-ghost" title="Start Jetski using internal LOAS/Stubby authentication">
+            Login (LOAS)
+          </button>
+          <button type="button" id="btnCtrlC" class="btn-ghost btn-warn" title="Send Ctrl+C interrupt (SIGINT)">
+            Ctrl+C
+          </button>
+          <button type="button" id="btnClear" class="btn-ghost" title="Clear terminal screen">
+            Clear
+          </button>
+          <button type="button" id="btnToggleHeight" class="btn-ghost" title="Toggle between 1/8 compact dock and expanded height">
+            Expand
+          </button>
+          <span id="termDimensions" class="dim-readout" title="Terminal grid dimensions">140x6</span>
+        </div>
+      </div>
+
+      <div class="terminal-stage">
+        <div id="terminalViewport" class="terminal-viewport"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- In-Browser Server Directory Picker Modal -->
+  <div id="folderModal" class="folder-modal" aria-hidden="true">
+    <div class="folder-dialog" role="dialog" aria-label="Select Working Folder">
+      <div class="folder-dialog-header">
+        <span>Select Working Folder (MCM Templates &amp; Output Path)</span>
+        <button type="button" id="btnCloseFolderModal" class="btn-ghost">Close</button>
+      </div>
+      <div class="folder-dialog-nav">
+        <button type="button" id="btnModalParent" class="btn-ghost">Up</button>
+        <input type="text" id="modalPathInput" class="wf-input modal-path-input" spellcheck="false" />
+        <button type="button" id="btnModalGo" class="btn-ghost">Go</button>
+        <div id="modalDrives" class="modal-drives"></div>
+      </div>
+      <div id="modalDetectedMcms" class="modal-detected-mcms"></div>
+      <div id="modalDirList" class="modal-dir-list"></div>
+      <div class="folder-dialog-footer">
+        <button type="button" id="btnModalSelectCurrent" class="btn-primary">Use This Folder as Working Space</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generated Outputs & Download Modal -->
+  <div id="outputsModal" class="folder-modal" aria-hidden="true">
+    <div class="folder-dialog" role="dialog" aria-label="Workspace Outputs">
+      <div class="folder-dialog-header">
+        <span>Generated Workspace Files (.mcm, .svg, .csv, .txt)</span>
+        <button type="button" id="btnCloseOutputsModal" class="btn-ghost">Close</button>
+      </div>
+      <div id="outputsModalList" class="modal-dir-list"></div>
+    </div>
+  </div>
+
+  <script src="/vendor/xterm.js"></script>
+  <script src="/vendor/addon-fit.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

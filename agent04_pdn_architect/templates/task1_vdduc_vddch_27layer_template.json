@@ -1,0 +1,180 @@
+{
+  "_template_doc": {
+    "title": "Task 1 — Full 27-Layer PDN Design Template: Core Compute (VDDUC* on LDB U7..U5) & Chiplet/Hub (VDDCH* on LDC U2..U1)",
+    "how_to_use": [
+      "1. Edit any parameter below (target RefDes/nets, L01 SURFACE VIA ratio & strap mode, per-layer L01..L27 polarity/shape_mode/split_gap_um, real eDTC catalog, Core PTH density, 9F->5F & 9B->5B stitch pitch, or BASE curved recess & 180-deg LSC rules).",
+      "2. Compile & validate all 27 layers: python -m agent04_pdn_architect.templates.pdn_27layer_template_runner --config agent04_pdn_architect/templates/task1_vdduc_vddch_27layer_template.json",
+      "3. Inspect generated SVGs + Layer Summary JSON in agent04_pdn_architect/reports/template_builds/task1_vdduc_vddch/, then run the generated *_run_apd_headless.bat (or add --build-mcm) to produce a new .mcm database."
+    ]
+  },
+  "task_id": "TASK1_VDDUC_VDDCH",
+  "flow_name": "VDDUC_VDDCH_FULL_27LAYER_PDN_TEMPLATE",
+  "design_io": {
+    "source_mcm_readonly": "agent04_pdn_architect/MCM_test/PDN_test.mcm",
+    "output_mcm_path": "agent04_pdn_architect/MCM_test/PDN_Task1_VDDUC_VDDCH_27Layer_Out.mcm",
+    "stage1_inputs_dir": "agent04_pdn_architect/stage1_inputs",
+    "bga_map_csv": "agent04_pdn_architect/stage1_inputs/bga_map.csv",
+    "edtc_pin_map_csv": "agent04_pdn_architect/stage1_inputs/edtc_pin_map.csv",
+    "edtc_symbols_csv": "agent04_pdn_architect/stage1_inputs/edtc_symbols.csv",
+    "lsc_placed_map_csv": "agent04_pdn_architect/stage1_inputs/lsc_placed_map.csv",
+    "output_build_dir": "agent04_pdn_architect/reports/template_builds/task1_vdduc_vddch"
+  },
+  "target_domains": {
+    "primary_ldb_domain": {
+      "refdes": "U7",
+      "symbol_name": "HUTTON_HILL_LDB_BC_A0",
+      "vdd_net": "VDDUC0",
+      "vss_net": "VSS",
+      "adjacent_emib_refdes": ["U28", "U32", "U35", "U38", "U47", "U48", "U49"],
+      "edtc_refdes_list": ["C2238", "C2239", "C2209", "C2210", "C2211"]
+    },
+    "secondary_ldc_domain": {
+      "refdes": "U2",
+      "symbol_name": "HUTTON_HILL_LDC_BC_A0",
+      "vdd_net": "VDDCH0",
+      "vss_net": "VSS",
+      "adjacent_emib_refdes": ["U35", "U36"],
+      "edtc_refdes_list": ["C2201", "C2202"]
+    },
+    "multi_site_replication": [
+      { "source_refdes": "U7", "dest_refdes": "U8", "source_vdd": "VDDUC0", "dest_vdd": "VDDUC1", "rotation_deg": 0.0,   "mirror_x": false },
+      { "source_refdes": "U7", "dest_refdes": "U6", "source_vdd": "VDDUC0", "dest_vdd": "VDDUC2", "rotation_deg": 180.0, "mirror_x": false },
+      { "source_refdes": "U7", "dest_refdes": "U5", "source_vdd": "VDDUC0", "dest_vdd": "VDDUC3", "rotation_deg": 180.0, "mirror_x": false },
+      { "source_refdes": "U2", "dest_refdes": "U4", "source_vdd": "VDDCH0", "dest_vdd": "VDDCH1", "rotation_deg": 0.0,   "mirror_x": false },
+      { "source_refdes": "U2", "dest_refdes": "U3", "source_vdd": "VDDCH0", "dest_vdd": "VDDCH2", "rotation_deg": 180.0, "mirror_x": false },
+      { "source_refdes": "U2", "dest_refdes": "U1", "source_vdd": "VDDCH0", "dest_vdd": "VDDCH3", "rotation_deg": 180.0, "mirror_x": false }
+    ]
+  },
+  "padstack_library": {
+    "c4_bump_surface": "C85_6_DP_01A",
+    "emib_ubump_surface_to_c0": "VU30_19_35_SURFACE_C0_01B",
+    "emib_csb_10f": "C77_10F_DP_01A",
+    "bga_ball_base": "C480_60_01B",
+    "dielectric_via_spans": {
+      "SURFACE_C0":  "VU30_19_35_SURFACE_C0_01B",
+      "SURFACE_12F": "V77_49_77_SURFACE_12F_01A",
+      "12F_11F":     "V90_65_90_12F_11F_01A",
+      "11F_10F":     "V90_65_90_11F_10F_01A",
+      "10F_9F":      "V90_65_90_10F_9F_01A",
+      "9F_8F":       "V90_65_90_9F_8F_01A",
+      "8F_7F":       "V90_65_90_8F_7F_01A",
+      "7F_6F":       "V90_65_90_7F_6F_01A",
+      "6F_5F":       "V90_65_90_6F_5F_01A",
+      "5F_4FCO":     "V90_65_121_5F_4FCO_01A",
+      "4FCO_3FCI":   "V282_5_85_175_4FCO_3FCI_01A",
+      "3FCI_2FCI":   "V175_85_175_3FCI_2FCI_01A",
+      "2FCI_2BCI":   "V282_5_150_282_5_2FCI_2BCI_01B",
+      "2BCI_3BCI":   "V282_5_85_175_2BCI_3BCI_01A",
+      "3BCI_4BCO":   "V175_85_282_5_3BCI_4BCO_01A",
+      "4BCO_5B":     "V121_65_90_4BCO_5B_01A",
+      "5B_6B":       "V90_65_90_5B_6B_01A",
+      "6B_7B":       "V90_65_90_6B_7B_01A",
+      "7B_8B":       "V90_65_90_7B_8B_01A",
+      "8B_9B":       "V90_65_90_8B_9B_01A",
+      "9B_10B":      "V90_65_90_9B_10B_01A",
+      "10B_11B":     "V90_65_90_10B_11B_01A",
+      "11B_12B":     "V90_65_90_11B_12B_01A",
+      "12B_BASE":    "V90_65_90_12B_BASE_01A"
+    }
+  },
+  "zone_routing_parameters": {
+    "zone1_surface_escape": {
+      "surface_via_ratio": "FULL",
+      "allowed_ratio_choices": ["FULL", "3:1", "4:2", "5:2"],
+      "strap_direction": "VERTICAL",
+      "allowed_direction_choices": ["VERTICAL", "HORIZONTAL", "BOTH"],
+      "strap_width_um": 24.0,
+      "min_cline_to_pad_gap_um": 18.0
+    },
+    "zone2_emib_and_10f_csb": {
+      "c0_exclusivity_inside_emib_only": true,
+      "l12f_l11f_emib_koz_from_die_um": 157.5,
+      "l10f_static_guard_ring_width_um": 150.0,
+      "l10f_guard_ring_gap_um": 50.0,
+      "csb_max_stacked_vias_below_10f": 2
+    },
+    "zone3_edtc_and_core_pth": {
+      "concentric_edtc_pin_offset_um": 0.0,
+      "edtc_max_stacked_vias_on_pin": 2,
+      "edtc_static_guard_band_width_um": 150.0,
+      "edtc_guard_to_plane_space_um": 67.5,
+      "edtc_catalog_koz_rules": {
+        "N24792-018": { "pin_count": 96,  "die_x_um": 1640.0, "die_y_um": 5080.0, "cavity_koz_margin_um": 300.0 },
+        "N24792-017": { "pin_count": 48,  "die_x_um": 1450.0, "die_y_um": 3640.0, "cavity_koz_margin_um": 300.0 },
+        "N24792-016": { "pin_count": 24,  "die_x_um": 1480.0, "die_y_um": 1980.0, "cavity_koz_margin_um": 300.0 }
+      },
+      "core_pth_density_per_mm2": 7.0,
+      "core_pth_pattern": "STAGGERED",
+      "allowed_pth_patterns": ["STAGGERED", "ORTHOGONAL_90DEG_VERTICAL", "ORTHOGONAL_90DEG_HORIZONTAL"],
+      "concentric_pp_on_pth_offset_um": 0.0,
+      "same_net_pth_min_pitch_um": 270.0,
+      "diff_net_pth_min_pitch_um": 432.5
+    },
+    "zone4_middle_bu_continuity_and_stack_limits": {
+      "enforce_9f_to_5f_continuity": true,
+      "enforce_9b_to_5b_continuity": true,
+      "middle_bu_stitch_pitch_um": 285.0,
+      "max_stacked_bu_vias": 7,
+      "max_stacked_bu_vias_on_pth": 5,
+      "enforce_atomic_net_matched_stack_pruning": true,
+      "zero_per_conductor_via_pad_overlap": true
+    },
+    "zone5_base_bga_curved_recess_and_lsc": {
+      "bga_cluster_a_7stack_option": "OPTION1_4VIA_SQUARE_2X2",
+      "allowed_bga_cluster_options": [
+        "OPTION1_4VIA_SQUARE_2X2",
+        "OPTION2_5VIA_QUINCUNX",
+        "OPTION3_6VIA_HEX_RING"
+      ],
+      "lsc_symbol_name": "SM0201_690X390X550_01A",
+      "lsc_thin_edge_symbol_name": "SM0201S_690X390X220_01C",
+      "enforce_conductor_base_only": true,
+      "enforce_logical_component_pin_nets": true,
+      "enforce_180deg_cap_to_cap_alternation": true,
+      "lsc_sro_to_sro_min_um": 250.0,
+      "exporter_u7_lsc_sro_rule_um": 175.0,
+      "curved_recess_rules": {
+        "enable_curved_bga_following_poly_cavity": true,
+        "recess_check_subclass": "SUBSTRATE GEOMETRY/recess_cavity_pdn",
+        "mfg_cavity_subclass": "SUBSTRATE GEOMETRY/LSC_CAVITY",
+        "base_keepout_subclass": "ROUTE KEEPOUT/BASE",
+        "mill_tool_radius_um": 508.0,
+        "bga_sro_to_cavity_min_um": 254.0,
+        "ext_cu_to_cavity_koz_um": 178.0,
+        "inner_cu_to_cavity_koz_um": 203.0,
+        "lsc_sro_to_cavity_min_um": 225.0,
+        "inter_cavity_min_web_um": 508.0,
+        "exclude_lsc_under_emib_die_shadow": true
+      }
+    }
+  },
+  "stackup_all_27_layers": [
+    { "order": 1,  "layer": "SURFACE", "cu_um": 17.0, "mode": "ROUTING_BUMP_ESCAPE",  "shape_type": "CLINE_AND_PADS", "nets": ["VDDUC0", "VDDCH0", "VSS"], "split_gap_um": 18.0, "notes": "C4 VIA escape + 24um M:N vertical/horizontal straps; EMIB uBumps drop to C0" },
+    { "order": 2,  "layer": "C0",      "cu_um": 8.0,  "mode": "EMIB_BRIDGE_ONLY",     "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 18.0, "notes": "Strictly inside EMIB die outline only (0 C0 copper outside bridges)" },
+    { "order": 3,  "layer": "12F",     "cu_um": 15.0, "mode": "DEDICATED_POWER_PLANE","shape_type": "DYNAMIC",        "nets": ["VDDUC0", "VDDCH0"],        "split_gap_um": 50.0, "notes": "157.5um EMIB cavity+pad KOZ voided" },
+    { "order": 4,  "layer": "11F",     "cu_um": 15.0, "mode": "DEDICATED_VSS_PLANE",  "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 50.0, "notes": "157.5um EMIB cavity+pad KOZ voided" },
+    { "order": 5,  "layer": "10F",     "cu_um": 15.0, "mode": "POWER_PLANE_CSB_FLOOR","shape_type": "DYNAMIC_PLUS_STATIC_GUARD", "nets": ["VDDUC0", "VDDCH0", "VSS"], "split_gap_um": 50.0, "notes": "Static 150um isolated guard ring under EMIB; <=2 stacked vias below 10F CSB" },
+    { "order": 6,  "layer": "9F",      "cu_um": 15.0, "mode": "DEDICATED_VSS_PLANE",  "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 50.0, "notes": "Top anchor of unbroken 9F->8F->7F->6F->5F VSS trunk" },
+    { "order": 7,  "layer": "8F",      "cu_um": 15.0, "mode": "DEDICATED_POWER_PLANE","shape_type": "DYNAMIC",        "nets": ["VDDUC0", "VDDCH0"],        "split_gap_um": 50.0, "notes": "Top anchor of 8F->7F->6F VDD middle-BU trunk" },
+    { "order": 8,  "layer": "7F",      "cu_um": 15.0, "mode": "DEDICATED_VSS_PLANE",  "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 50.0, "notes": "Intermediate VSS shield plane; receives concentric 3-stack eDTC VSS vias" },
+    { "order": 9,  "layer": "6F",      "cu_um": 15.0, "mode": "DEDICATED_POWER_PLANE","shape_type": "DYNAMIC",        "nets": ["VDDUC0", "VDDCH0"],        "split_gap_um": 50.0, "notes": "Primary frontside VDD collector feeding 2-stack concentric eDTC VDD & PTH stacks" },
+    { "order": 10, "layer": "5F",      "cu_um": 15.0, "mode": "DEDICATED_VSS_PLANE",  "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 50.0, "notes": "Bottom anchor of 9F->5F VSS trunk & 1-stack concentric eDTC VSS landing" },
+    { "order": 11, "layer": "4FCO",    "cu_um": 18.0, "mode": "EDTC_EMBEDDED_LAYER",  "shape_type": "DYNAMIC_PLUS_STATIC_GUARD", "nets": ["VDDUC0", "VDDCH0", "VSS"], "split_gap_um": 67.5, "notes": "Real per-device eDTC KOZ + 150um static guard ring + 0.0um concentric pin landing" },
+    { "order": 12, "layer": "3FCI",    "cu_um": 25.0, "mode": "PREPREG_PLANE",        "shape_type": "DYNAMIC",        "nets": ["VDDUC0", "VDDCH0"],        "split_gap_um": 67.5, "notes": "eDTC vertical KOZ blocked through 4FCO..4BCO" },
+    { "order": 13, "layer": "2FCI",    "cu_um": 35.0, "mode": "CORE_TOP_PLANE",       "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 67.5, "notes": "7 PTH/mm2 staggered Core PTH top pad capture; eDTC KOZ voided" },
+    { "order": 14, "layer": "1FCI",    "cu_um": 35.0, "mode": "INNER_CORE_PLANE",     "shape_type": "DYNAMIC",        "nets": ["VDDUC0", "VDDCH0"],        "split_gap_um": 67.5, "notes": "Heavy 35um inner core copper; eDTC KOZ voided" },
+    { "order": 15, "layer": "1BCI",    "cu_um": 35.0, "mode": "INNER_CORE_PLANE",     "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 67.5, "notes": "Heavy 35um inner core VSS return; eDTC KOZ voided" },
+    { "order": 16, "layer": "2BCI",    "cu_um": 35.0, "mode": "CORE_BOT_PLANE",       "shape_type": "DYNAMIC",        "nets": ["VDDUC0", "VDDCH0"],        "split_gap_um": 67.5, "notes": "Core PTH bottom pad capture; eDTC KOZ voided" },
+    { "order": 17, "layer": "3BCI",    "cu_um": 25.0, "mode": "PREPREG_PLANE",        "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 67.5, "notes": "Backside prepreg VSS return; eDTC KOZ voided" },
+    { "order": 18, "layer": "4BCO",    "cu_um": 18.0, "mode": "BACKSIDE_PP_FLOOR",    "shape_type": "DYNAMIC_PLUS_STATIC_GUARD", "nets": ["VDDUC0", "VDDCH0", "VSS"], "split_gap_um": 67.5, "notes": "Real eDTC KOZ + 150um static guard ring; 0 vias inside eDTC KOZ" },
+    { "order": 19, "layer": "5B",      "cu_um": 15.0, "mode": "SOLID_VSS_SHIELD",     "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 50.0, "notes": "Mandatory solid unbroken VSS plane directly under all eDTC shadows" },
+    { "order": 20, "layer": "6B",      "cu_um": 15.0, "mode": "DEDICATED_POWER_PLANE","shape_type": "DYNAMIC",        "nets": ["VDDUC0", "VDDCH0"],        "split_gap_um": 50.0, "notes": "Backside VDD collector receiving concentric PTH+PP+BU stacks" },
+    { "order": 21, "layer": "7B",      "cu_um": 15.0, "mode": "DEDICATED_VSS_PLANE",  "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 50.0, "notes": "Backside VSS intermediate plane in 5B->9B trunk" },
+    { "order": 22, "layer": "8B",      "cu_um": 15.0, "mode": "DEDICATED_POWER_PLANE","shape_type": "DYNAMIC",        "nets": ["VDDUC0", "VDDCH0"],        "split_gap_um": 50.0, "notes": "Backside VDD intermediate plane in 6B->12B trunk" },
+    { "order": 23, "layer": "9B",      "cu_um": 15.0, "mode": "DEDICATED_VSS_PLANE",  "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 50.0, "notes": "Lower anchor of unbroken 5B->6B->7B->8B->9B VSS stitch" },
+    { "order": 24, "layer": "10B",     "cu_um": 15.0, "mode": "DEDICATED_POWER_PLANE","shape_type": "DYNAMIC",        "nets": ["VDDUC0", "VDDCH0"],        "split_gap_um": 50.0, "notes": "Lower backside VDD spreading plane" },
+    { "order": 25, "layer": "11B",     "cu_um": 15.0, "mode": "DEDICATED_VSS_SHIELD", "shape_type": "DYNAMIC",        "nets": ["VSS"],                     "split_gap_um": 50.0, "notes": "Lowest full VSS return shield above 12B GCP; receives LSC & BGA VSS 2-stacks" },
+    { "order": 26, "layer": "12B",     "cu_um": 40.0, "mode": "HEAVY_GCP_POWER_PLANE","shape_type": "DYNAMIC",        "nets": ["VDDUC0", "VDDCH0"],        "split_gap_um": 67.5, "notes": "40um Ground/Power Plane directly feeding BASE 0201 LSCs via 1-stack uVias" },
+    { "order": 27, "layer": "BASE",    "cu_um": 22.0, "mode": "BGA_AND_CURVED_LSC",   "shape_type": "PADS_AND_CAVITY","nets": ["VDDUC0", "VDDCH0", "VSS"], "split_gap_um": 178.0,"notes": "4/5/6-via BGA clusters + Curved BGA-Following POLY_CAVITY (recess_cavity_pdn) + 180-deg SM0201 LSCs on CONDUCTOR/BASE" }
+  ]
+}

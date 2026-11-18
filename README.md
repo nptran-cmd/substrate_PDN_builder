@@ -14,7 +14,7 @@ This repository packages the **Substrate PDN Builder (Agent 04 — PDN Architect
 
 ### Key Architectural Highlights
 - **Unified 4-Rail-Group × 8-Step PDN Pipeline (`pdn_8step_flow.py`)**: End-to-end parameterized router across **`Core` (`VDDC* + SRAM`)**, **`Uncore` (`VDDUC*`)**, **`Chiplet` (`VDDCH*`)**, and **`HBM` (`VDDQ + VDDC + VDDQL + VPP`)**:
-  - **Step 1 (`SURFACE`)**: `FULL` VIP or any `M:N` ratio (`4:2`, `5:2`, `3:1`) with H/V/BOTH strapping (`0` floating bumps).
+  - **Step 1 (`SURFACE`)**: `FULL` VIA or any `M:N` ratio (`4:2`, `5:2`, `3:1`) with H/V/BOTH strapping (`0` floating bumps).
   - **Step 2 (Front BU Transition)**: Same-net BU stack (`SURFACE -> 6F VDD / 7F VSS`, `<= 7` BU spans / `<= 3` in EMIB HSIO void).
   - **Step 3 (Core PTH `4–11 PTH/mm²`)**: `PKG 0.8` (`270/432.5 um`, ceiling `9.01/8.56`) & `PKG 0.1` (`216.5/350 um`, full `4..11 PTH/mm²`), Staggered & 90° H/V, plus `eDTC` `300 um` Cavity KOZ + `150 um` Guard Metal (`700.0 um` center KOZ).
   - **Step 4 (Prepreg `PP` Patterns + Substrate DR Audit)**: `1_VIA_CENTER`, `2_VIA_ON_PTH` (`45 um` PP-PP overlap), and `4_VIA_PER_PTH` audited against max vias/PTH pad (`1 [PKG0.1] / 2 [PKG0.8]`) & `67.5 um` Core/PP L/S.
@@ -33,107 +33,35 @@ This repository packages the **Substrate PDN Builder (Agent 04 — PDN Architect
 
 ```text
 substrate_PDN_builder/
+├── AIstudio/                              # Local Cross-Platform Web UI + Direct Run + Terminal
+│   ├── backend/                           # Starlette/Uvicorn API, Direct Runner, Win ConPTY & Linux PTY
+│   ├── frontend/                          # Interactive Prompt Catalog, Live SVG Viewer, Upload/Outputs, xterm.js
+│   ├── tests/                             # test_studio.py, test_linux_direct_studio.py, test_pdn_8step.py
+│   ├── start_studio.ps1                   # Launch Web Studio on Windows (http://127.0.0.1:8765)
+│   ├── start_linux_studio.sh              # Launch Web Studio on Linux with Cadence run_apd.sh isolation
+│   ├── open_linux_tunnel.ps1              # SSH tunnel helper from laptop to Linux host (port 8766 -> 8765)
+│   ├── deploy_linux_studio.ps1            # Package & sync clean Studio + Agent 04 bundle to Linux
+│   ├── LINUX_SETUP.md                     # Linux workstation setup guide
+│   └── requirements.txt                   # starlette, uvicorn, websockets, python-multipart
+├── agent04_pdn_architect/                 # Canonical Agent 04 Python/SKILL package
+│   ├── cad_cli/                           # 28 Python PDN routers, SVG renderers, MCP tools
+│   ├── scripts/                           # 18 Cadence Allegro/APD SKILL batch (.il) engines
+│   ├── templates/                         # Designer-editable 27-layer JSON templates & runner
+│   ├── skills/                            # 19 modular SKILL.md workflows
+│   └── tests/                             # Unit & regression suites
+├── agent09_via_routing/                   # Cross-platform CadenceBatchRunner (apd.exe / run_apd.sh + xvfb-run)
 ├── .gemini/
 │   └── GEMINI.md
-├── cad_cli/
-│   ├── mcp/
-│   │   ├── __init__.py
-│   │   └── pdn_architect_tool.py
-│   ├── __init__.py
-│   ├── __main__.py
-│   ├── apd_27layer_master_exporter.py
-│   ├── audit_pdn_test_placement.py
-│   ├── base_lsc_bga_router.py
-│   ├── cadence_runner.py
-│   ├── curved_recess_and_lsc_engine.py
-│   ├── full_27layer_u7_vdduc_vss_mockup.py
-│   ├── full_package_all_dies_pdn.py
-│   ├── hbm_surface_and_csb_router.py
-│   ├── lsc_pin_net_assigner.py
-│   ├── multi_rail_polygon_engine.py
-│   ├── pdn_8step_flow.py
-│   ├── pdn_architect.py
-│   ├── pdn_paths.py
-│   ├── pdn_prelearn.py
-│   ├── pdn_svg_sandbox.py
-│   ├── pth_4fco_4bco_router.py
-│   ├── stage1_input_builder.py
-│   ├── step1_step2_u9_u13_validator.py
-│   ├── surface_layer1_router.py
-│   ├── u6_8step_mcm_builder.py
-│   ├── u7_topside_bu_sandbox.py
-│   ├── u9_vddc_sram_lsc_new_rule_sandbox.py
-│   ├── u9_vddc_sram_surface_3to1_jog_router.py
-│   ├── upper_left_corner_pdn.py
-│   └── vdduc0_base_cavity_lsc_svg_generator.py
 ├── examples/
 │   ├── mockup_Step1_Step2_U13_HBM_4Rail.svg
 │   └── mockup_Step1_Step2_U9_MultiRail.svg
 ├── prompts/
 │   └── EXAMPLE_PROMPTS.md
-├── scripts/
-│   ├── base_lsc_bga_router_batch.il
-│   ├── check_pdn_test_placement_batch.il
-│   ├── edtc_pdn_guard_batch.il
-│   ├── full_27layer_apd_implementer_batch.il
-│   ├── lsc_pin_net_assign_batch.il
-│   ├── lsc_pocket_placer_batch.il
-│   ├── multi_rail_step1_step2_implementer_batch.il
-│   ├── padstack_learner_batch.il
-│   ├── pdn_above_bu_batch.il
-│   ├── pdn_below_bu_batch.il
-│   ├── pdn_core_batch.il
-│   ├── pdn_import_from_txt_batch.il
-│   ├── pdn_Pipeline_batch.il
-│   ├── pth_4fco_4bco_router_batch.il
-│   ├── PTH_and_PPvia_batch.il
-│   ├── stage1_full_extractor_batch.il
-│   └── surface_bump_router_batch.il
-├── skills/
-│   ├── base_lsc_bga_routing/
-│   │   └── SKILL.md
-│   ├── emib_csb_and_hbm_surface_router/
-│   │   └── SKILL.md
-│   ├── full_27layer_apd_implementation/
-│   │   └── SKILL.md
-│   ├── hbm_vdd_routing_flow/
-│   │   ├── references/
-│   │   │   └── hbm_u13_learned_profile.json
-│   │   ├── templates/
-│   │   │   └── hbm_vdd_all_layer_template.il
-│   │   ├── SKILL.md
-│   │   ├── TEMPLATE.md
-│   │   └── TODO.md
-│   ├── multi_rail_plane_polygon_splitter/
-│   │   └── SKILL.md
-│   ├── pth_4fco_4bco_routing/
-│   │   └── SKILL.md
-│   ├── surface_layer1_routing/
-│   │   └── SKILL.md
-│   ├── vddc_vddram_routing_flow/
-│   │   ├── references/
-│   │   │   └── lda_vddc0_sram0_learned_profile.json
-│   │   ├── templates/
-│   │   │   └── vddc_vddram_all_layer_template.il
-│   │   ├── SKILL.md
-│   │   ├── TEMPLATE.md
-│   │   └── TODO.md
-│   └── vdduc_vddch_routing_flow/
-│       ├── templates/
-│       │   └── vdduc_vddch_all_layer_template.il
-│       ├── SKILL.md
-│       ├── TEMPLATE.md
-│       └── TODO.md
-├── tests/
-│   └── test_agent04_suite.py
-├── .gitignore
-├── __init__.py
+├── skills/                                # Root skill mirror for automatic IDE/CLI discovery
 ├── AGENTS.md
 ├── LICENSE
 ├── README.md
-├── SKILL.md
-├── TEMPLATE.md
-└── TODO.md
+└── TUTORIAL_BUILD_MCM_FROM_MCM.md
 ```
 
 ---
@@ -142,7 +70,7 @@ substrate_PDN_builder/
 
 | Skill | Description | Bundled Scripts |
 | :--- | :--- | :--- |
-| [`step1_surface_bump_routing`](skills/step1_surface_bump_routing/SKILL.md) | Step 1 PDN Skill: `SURFACE` FULL VIP or `M:N` ratio (`4:2`, `5:2`, `3:1`) with H/V/BOTH floating-bump jogging (`0` floating bumps). | *(Markdown Runbook)* |
+| [`step1_surface_bump_routing`](skills/step1_surface_bump_routing/SKILL.md) | Step 1 PDN Skill: `SURFACE` FULL VIA or `M:N` ratio (`4:2`, `5:2`, `3:1`) with H/V/BOTH floating-bump jogging (`0` floating bumps). | *(Markdown Runbook)* |
 | [`step2_frontside_bu_transition`](skills/step2_frontside_bu_transition/SKILL.md) | Step 2 PDN Skill: Frontside BU stack (`SURFACE -> 6F VDD / 7F VSS`) obeying `<= 7` BU limit (`<= 3` in EMIB HSIO void). | *(Markdown Runbook)* |
 | [`step3_core_pth_routing`](skills/step3_core_pth_routing/SKILL.md) | Step 3 PDN Skill: Core PTH (`4..11 PTH/mm²`) Staggered / 90° H/V with `PKG0.8`/`PKG0.1` and `700 um` `eDTC` KOZ + Guard Metal. | *(Markdown Runbook)* |
 | [`step4_prepreg_pp_routing`](skills/step4_prepreg_pp_routing/SKILL.md) | Step 4 PDN Skill: Prepreg (`PP`) `1_VIA_CENTER`, `2_VIA_ON_PTH`, `4_VIA_PER_PTH` patterns + Substrate DR audit. | *(Markdown Runbook)* |
@@ -166,7 +94,28 @@ substrate_PDN_builder/
 
 ## 🚀 Quickstart & Installation
 
-### Option 1: Use Directly as a Workspace Agent
+### Option 1: Launch Local Web Studio UI (`AIstudio` on Windows or Linux — Recommended)
+Run the interactive Substrate AI Design Studio UI locally (supports `.mcm` upload into `<working_dir>/MCM_template`, 1-click **Direct** Python/APD execution, live SVG viewer, downloadable **Outputs**, and embedded ConPTY/POSIX terminal):
+
+**Windows:**
+```powershell
+git clone https://github.com/nptran-cmd/substrate_PDN_builder.git
+cd substrate_PDN_builder
+python -m pip install -r AIstudio/requirements.txt
+.\AIstudio\start_studio.ps1
+```
+Open **`http://127.0.0.1:8765`** in your browser.
+
+**Linux (with local Cadence APD `run_apd.sh` / `apd`):**
+```bash
+git clone https://github.com/nptran-cmd/substrate_PDN_builder.git
+cd substrate_PDN_builder
+chmod +x AIstudio/start_linux_studio.sh
+./AIstudio/start_linux_studio.sh --bootstrap
+```
+See [AIstudio/LINUX_SETUP.md](AIstudio/LINUX_SETUP.md) for SSH tunnel setup (`open_linux_tunnel.ps1`).
+
+### Option 2: Use Directly as a Workspace CLI Agent
 Clone this repository and launch your AI agent inside the folder (it will automatically load `.gemini/GEMINI.md` and discover `skills/`):
 
 ```bash
@@ -175,7 +124,7 @@ cd substrate_PDN_builder
 gemini
 ```
 
-### Option 2: Install Skills Globally into Your Agent Config
+### Option 3: Install Skills Globally into Your Agent Config
 Copy any skill from `skills/` into your global agent skills directory (`~/.gemini/config/skills/` or `~/.gemini/skills/`) so it is available across all your workspaces:
 
 ```powershell
@@ -204,7 +153,7 @@ Once the agent or skills are loaded, try asking any of the following prompts (se
 - *"Create a new `.mcm` based on `@agent04_pdn_architect/MCM_test/master.tag` for the entire upper-left quadrant including `U1` (`VDDCH3`), `U5` (`VDDUC1`), `U12` (`VDDC1` + `VDD_0P8_SRAM_CC1`), and all 3 upper-left HBM dies (`U13 MEM5`, `U14 MEM4`, `U15 MEM3`)."*
 
 ### 🔹 3. Single-Rail `VDDUC*` & `VDDCH*` 27-Layer Flow (`vdduc_vddch_routing_flow`)
-- *"Use the `vdduc_vddch_routing_flow` skill to route the full 27-layer PDN for `U7` (`VDDUC0` and `VSS`) and `U2` (`VDDCH0` and `VSS`) with 100% `SURFACE` VIP, concentric `4FCO` `eDTC` stacks, unbroken `9F->5F` / `9B->5B` trunks, and `180°` alternating `CONDUCTOR/BASE` LSCs."*
+- *"Use the `vdduc_vddch_routing_flow` skill to route the full 27-layer PDN for `U7` (`VDDUC0` and `VSS`) and `U2` (`VDDCH0` and `VSS`) with 100% `SURFACE` VIA, concentric `4FCO` `eDTC` stacks, unbroken `9F->5F` / `9B->5B` trunks, and `180°` alternating `CONDUCTOR/BASE` LSCs."*
 
 ### 🔹 4. Co-Resident Dual-Rail `VDDC0..3` + `VDD_0P8_SRAM_CC0..3` (`vddc_vddram_routing_flow`)
 - *"Use the `vddc_vddram_routing_flow` skill to synthesize the 27-layer co-resident dual-rail PDN for `U9` (`VDDC0` + `VDD_0P8_SRAM_CC0` + `VSS`), including the `3:1` vertical jog `SURFACE` strapping, `10F` West-to-East `SRAM` bridge backbone, real `N24792-018` `eDTC` keepout voids, and co-pocket `BASE` LSCs."*
@@ -216,7 +165,7 @@ Once the agent or skills are loaded, try asking any of the following prompts (se
 - *"Use the `base_lsc_bga_routing` skill and `curved_recess_and_lsc_engine.py` to synthesize all curved `BASE` mechanical recess cavities (`R=500 um`, `>=250 um` BGA-to-cavity, `>=225 um` LSC-to-cavity) and pack `0201` LSCs on `CONDUCTOR/BASE` with `180°` cap-to-cap polarity alternation and `Pin 1 = VDD*` / `Pin 2 = VSS` net assignments."*
 
 ### 🔹 7. Layer 1 (`SURFACE`) Bump-Via Ratios & Core `PTH` (`4FCO ↔ 4BCO`) Sweeps
-- *"Use the `surface_layer1_routing` skill on `U7` (`VDDUC0` and `VSS`) to compare 100% Full VIP against a `5:2` `VDD:VSS` bump-via ratio with `HORIZONTAL`, `VERTICAL`, and `BOTH` 2D `24 um` `SURFACE` strapping."*
+- *"Use the `surface_layer1_routing` skill on `U7` (`VDDUC0` and `VSS`) to compare 100% Full VIA against a `5:2` `VDD:VSS` bump-via ratio with `HORIZONTAL`, `VERTICAL`, and `BOTH` 2D `24 um` `SURFACE` strapping."*
 - *"Use the `pth_4fco_4bco_routing` skill on `U7` (`VDDUC0` / `VSS`) to sweep Core PTH densities of `5, 6, 7, and 8 PTH/mm²` across both Staggered and `90°` Orthogonal H/V patterns, subtract all `4FCO` `eDTC` keepouts, and generate a 4-panel density comparison SVG."*
 
 

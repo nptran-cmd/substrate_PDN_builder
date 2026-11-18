@@ -14,7 +14,7 @@
    - **`target_domains`:** Set `LDB` (`U7 -> U8, U6, U5` `VDDUC0..3`) and `LDC` (`U2 -> U4, U3, U1` `VDDCH0..3`) RefDes, net names, adjacent EMIBs, and `eDTC` lists.
    - **`padstack_library`:** Swap any via padstack across all 24 dielectric spans (`SURFACE_C0`, `SURFACE_12F`, `12F_11F` .. `12B_BASE`).
    - **`zone_routing_parameters`:**
-     - `zone1_surface_escape`: Choose `surface_vip_ratio` (`"FULL"`, `"3:1"`, `"4:2"`, `"5:2"`) and `strap_direction` (`"VERTICAL"`, `"HORIZONTAL"`, `"BOTH"`).
+     - `zone1_surface_escape`: Choose `surface_via_ratio` (`"FULL"`, `"3:1"`, `"4:2"`, `"5:2"`) and `strap_direction` (`"VERTICAL"`, `"HORIZONTAL"`, `"BOTH"`).
      - `zone3_edtc_and_core_pth`: Adjust real per-part-number `eDTC` KOZs (`N24792-018` `96p`, `017` `48p`, `016` `24p`), `core_pth_density_per_mm2` (`5..8`), and `core_pth_pattern` (`"STAGGERED"` / `"ORTHOGONAL_90DEG_*"`).
      - `zone4_middle_bu_continuity_and_stack_limits`: Control `9F->5F` & `9B->5B` stitch pitch (`285 µm`) and stack limits (`<=7` BU, `<=5` on PTH).
      - `zone5_base_bga_curved_recess_and_lsc`: Select BGA cluster (`OPTION1_4VIA_SQUARE_2X2`, `OPTION2_5VIA_QUINCUNX`, `OPTION3_6VIA_HEX_RING`), LSC SRO rule (`175` or `250 µm`), and Curved BGA-Following Recess rules (`mill_tool_radius_um: 508.0`, `bga_sro_to_cavity_min_um: 254.0`, `ext_cu_to_cavity_koz_um: 178.0`, `lsc_sro_to_cavity_min_um: 225.0`).
@@ -33,7 +33,7 @@
 
 | Order | Layer | Shape Mode | Primary Nets | Key Routing & DRC Rules |
 | :---: | :---: | :--- | :--- | :--- |
-| `L01` | `SURFACE` | `CLINE_AND_PADS` | `VDDUC*`, `VDDCH*`, `VSS` | `FULL` or `3:1` VIP + `24 µm` straps; EMIB uBumps drop to `C0` |
+| `L01` | `SURFACE` | `CLINE_AND_PADS` | `VDDUC*`, `VDDCH*`, `VSS` | `FULL` or `3:1` VIA + `24 µm` straps; EMIB uBumps drop to `C0` |
 | `L02` | `C0` | `DYNAMIC` | `VSS` | Strictly inside EMIB bridge die outlines (`0` copper outside) |
 | `L03..L04` | `12F, 11F` | `DYNAMIC` | `VDD` / `VSS` | `157.5 µm` EMIB cavity+pad KOZ voided |
 | `L05` | `10F` | `DYNAMIC_PLUS_STATIC_GUARD` | `VDD`, `VSS` | Static `150 µm` isolated EMIB guard ring; `<=2` stacked vias below CSB |

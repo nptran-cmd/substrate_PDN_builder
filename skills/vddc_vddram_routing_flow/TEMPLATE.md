@@ -12,7 +12,7 @@
 1. **Open & Modify Inputs:** Edit [`task2_vddc_sram_27layer_template.json`](file:///<agent_workspace>/agent04_pdn_architect/templates/task2_vddc_sram_27layer_template.json):
    - **`target_domains`:** Set `LDA` die (`U9 -> U12, U88, U10`), `VDDC0..3` & `VDD_0P8_SRAM_CC0..3` rails, EMIB bridges (`U25, U29, U32, U28, U39`), pure `VDDC` `eDTC`s (`C2215, C2217, C2219, C2220`), shared `VDDC+SRAM` `eDTC`s (`C2216, C2218`), and Kelvin sense pairs.
    - **`zone1_surface_escape`:**
-     - `surface_routing_mode`: Choose `"PARTIAL_3_TO_1_VERTICAL_C_S_JOG"` (`75%` VIP on BOTH `VDDC0` & `SRAM_CC0`, `25%` VIP on `VSS`, `15 µm` vertical C-Jogs & S-Jogs), `"PARTIAL_3_TO_1_HORIZONTAL_COLLAR"`, or `"FULL_VIP"`.
+     - `surface_routing_mode`: Choose `"PARTIAL_3_TO_1_VERTICAL_C_S_JOG"` (`75%` VIA on BOTH `VDDC0` & `SRAM_CC0`, `25%` VIA on `VSS`, `15 µm` vertical C-Jogs & S-Jogs), `"PARTIAL_3_TO_1_HORIZONTAL_COLLAR"`, or `"FULL_VIA"`.
    - **`zone3_edtc_and_core_pth`:** Customize `96-pin` `N24792-018` KOZ dimensions (`2,240 × 5,680 µm`), `150 µm` static guard bands, and Core PTH pitch (`520 × 480 µm`).
    - **`zone4_middle_bu_continuity_and_stack_limits`:** Configure `285 µm` `9F->5F` & `9B->5B` zero-overlap stitch arrays.
    - **`zone5_base_bga_curved_recess_and_lsc`:** Configure `8-via` `R = 195 µm` `C480` BGA octagon clusters, `250 µm` LSC SRO-to-SRO spacing, and Curved Non-Rectangular `POLY_CAVITY` rules (`R_mill = 508 µm`, `BGA SRO >= 254 µm`, `+178 µm` Ext Cu KOZ, `-225 µm` LSC safe envelope on `SUBSTRATE GEOMETRY/recess_cavity_pdn`).
@@ -31,7 +31,7 @@
 
 | Order | Layer | Shape Mode | Co-Planar Partition | Key Routing & DRC Rules |
 | :---: | :---: | :--- | :--- | :--- |
-| `L01` | `SURFACE` | `CLINE_AND_PADS` | `VDDC0` + `SRAM_CC0` + `VSS` | `3:1` Partial VIP (`75%` VDD / `25%` VSS) + `15 µm` Vertical C-Jogs & S-Jogs |
+| `L01` | `SURFACE` | `CLINE_AND_PADS` | `VDDC0` + `SRAM_CC0` + `VSS` | `3:1` Partial VIA (`75%` VDD / `25%` VSS) + `15 µm` Vertical C-Jogs & S-Jogs |
 | `L02` | `C0` | `DYNAMIC` | `VSS` (EMIB Only) | `U25, U29, U32, U28, U39` `C18` uBumps (`0` `C0` copper outside bridges) |
 | `L03..L04` | `12F, 11F` | `DYNAMIC` | `12F=VDDC0` / `11F=VSS` | `157.5 µm` EMIB KOZ voided |
 | `L05` | `10F` | `DYNAMIC_PLUS_STATIC_GUARD` | `SRAM_CC0` + East `VDDC0` | `3-stack` `SRAM_CC0` collector + Static `150 µm` EMIB guard rings + `10F CSB` |

@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > **Safety-by-Design Architecture:**
 > 1. Your original `.mcm` database (for example [`PDN_test.mcm`](file:///<agent_workspace>/agent04_pdn_architect/MCM_test/PDN_test.mcm) or `HH_Nguyen_*_TO_v8.mcm`) is treated as **100% Read-Only**.
-> 2. `<pcbenv_skill_dir>/` is **never modified**.
+> 2. `<cadence_library_dir>` is **never modified**.
 > 3. Every PDN build MUST pass through the **Sandbox Simulation + SVG Visual Gate** (`--stage sandbox`) and an explicit **Final Confirmation Gate** (`--stage implement-mcm` requiring `YES_IMPLEMENT_MCM`) before a copied output `.mcm` is touched by Cadence APD (`apd.exe -nographic`).
 
 ---
@@ -64,8 +64,8 @@ Open the editable JSON template for the PDN task you want to build and adjust an
 ### Key Knobs Designers Commonly Modify
 1. **`design_io`**: Set `source_mcm_readonly` (your input `.mcm`) and `output_mcm_path` (your brand-new output `.mcm` filename).
 2. **`zone1_surface_escape` (`L01 SURFACE`)**:
-   - Task 1: `surface_vip_ratio` (`"FULL"`, `"3:1"`, `"4:2"`, `"5:2"`), `strap_direction` (`"VERTICAL"`, `"HORIZONTAL"`, `"BOTH"`).
-   - Task 2: `surface_routing_mode` (`"PARTIAL_3_TO_1_VERTICAL_C_S_JOG"`, `"PARTIAL_3_TO_1_HORIZONTAL_COLLAR"`, `"FULL_VIP"`), `vertical_jog_trace_width_um` (`15.0`).
+   - Task 1: `surface_via_ratio` (`"FULL"`, `"3:1"`, `"4:2"`, `"5:2"`), `strap_direction` (`"VERTICAL"`, `"HORIZONTAL"`, `"BOTH"`).
+   - Task 2: `surface_routing_mode` (`"PARTIAL_3_TO_1_VERTICAL_C_S_JOG"`, `"PARTIAL_3_TO_1_HORIZONTAL_COLLAR"`, `"FULL_VIA"`), `vertical_jog_trace_width_um` (`15.0`).
    - Task 3: `west_non_emib_gang_stripe_height_um` (`90.0`), `west_strap_width_um` (`35.0`).
 3. **`zone3_edtc_and_core_pth` (`4FCO..4BCO`)**:
    - Real compact per-device `eDTC` KOZs (`N24792-018` `96p`, `N24792-017` `48p`, `N24792-016` `24p`), `edtc_static_guard_band_width_um` (`150.0`), Core PTH density/pattern (`7.0/mm²`, `"STAGGERED"`).

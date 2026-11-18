@@ -1,12 +1,12 @@
 # Agent 04 (`pdn_architect`) — 4-Stage Implementation TODO List
 
 > [!IMPORTANT]
-> **Hard Constraint:** Never modify any file in `<pcbenv_skill_dir>/`. All refactored SKILL `.il` scripts, Python indexers, SVG sandbox exporters, and pipe-delimited recipe files live in `agent04_pdn_architect/`.
+> **Hard Constraint:** Never modify any file in `<cadence_library_dir>`. All refactored SKILL `.il` scripts, Python indexers, SVG sandbox exporters, and pipe-delimited recipe files live in `agent04_pdn_architect/`.
 
 ---
 
 ## Phase 1: Architecture, Documentation & 4-Stage Plan (COMPLETED)
-- [x] Inspect `<pcbenv_skill_dir>/` PDN scripts (`pdn_via_placement.il`, `addvia_onbump_HFC.il`, `PTH_generation_and_PPvia_HFC_case2/case2_mod/case3.il`, `BGA_routing/ver2/ver3.il`, `HFC_change_pin_net_edtc.il`, `PDN_spider_web_routing.il`, `pdn_jog_routing.il`).
+- [x] Inspect `<cadence_library_dir>` PDN scripts (`pdn_via_placement.il`, `addvia_onbump_HFC.il`, `PTH_generation_and_PPvia_HFC_case2/case2_mod/case3.il`, `BGA_routing/ver2/ver3.il`, `HFC_change_pin_net_edtc.il`, `PDN_spider_web_routing.il`, `pdn_jog_routing.il`).
 - [x] Extract quantitative design rules from `specs_and_docs/design_rules/` (`Via Rules`, `eDTC DR`, `BGALSC Rules`, `Substrate Design Rules`).
 - [x] Create [`agent04_pdn_architect/SKILL.md`](file:///<agent_workspace>/agent04_pdn_architect/SKILL.md) with the 4-Stage architecture (`Pre-Learn` $\rightarrow$ `5-Zone Synthesis` $\rightarrow$ `SVG Visual Sandbox` $\rightarrow$ `Pipe-Delimited Text Recipe & .mcm Import`).
 - [x] Create [`agent04_pdn_architect/TEMPLATE.md`](file:///<agent_workspace>/agent04_pdn_architect/TEMPLATE.md) defining the JSON request/response schemas and `pdn_import_recipe.txt` pipe-delimited record format.
