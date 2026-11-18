@@ -6,6 +6,13 @@
 
 > **Autonomous 27-layer IC package substrate Power Delivery Network (PDN) synthesis across all 4 rail groups (`Core VDDC/SRAM`, `Uncore VDDUC`, `Chiplet VDDCH`, `HBM`) and all 8 PDN routing steps, with Dynamic/Static copper shapes, multi-family `eDTC` & curved `LSC_CAVITY` recess engines, and headless Cadence Allegro / APD SKILL automation.**
 
+### Team Rollout Quick Links (Start Here)
+* **All-User Setup & Daily Guideline:** [USER_GUIDELINE.md](USER_GUIDELINE.md) *(Windows, Linux, SSH Tunnel, Working Folder isolation, Step 0 -> Steps 1–8 -> Output `.mcm`)*
+* **Team Rollout & Onboarding TODO List:** [TODO.md](TODO.md) *(Owner pre-share checklist + Engineer setup checklist + Per-design PDN gate checklist)*
+* **Prompt & 27-Layer Request Templates:** [TEMPLATE.md](TEMPLATE.md) *(Fill-in-the-blank prompt template, 4 rail presets, JSON config templates)*
+* **New Skill Authoring Template:** [SKILL_TEMPLATE.md](SKILL_TEMPLATE.md) *(Copy-paste `SKILL.md` skeleton + registration checklist)*
+* **Linux Server Setup:** [AIstudio/LINUX_SETUP.md](AIstudio/LINUX_SETUP.md)
+
 ---
 
 ## 📖 Overview
@@ -61,7 +68,12 @@ substrate_PDN_builder/
 ├── AGENTS.md
 ├── LICENSE
 ├── README.md
-└── TUTORIAL_BUILD_MCM_FROM_MCM.md
+├── SKILL.md
+├── SKILL_TEMPLATE.md
+├── TEMPLATE.md
+├── TODO.md
+├── TUTORIAL_BUILD_MCM_FROM_MCM.md
+└── USER_GUIDELINE.md
 ```
 
 ---
@@ -142,15 +154,15 @@ cp -r skills/* ~/.gemini/config/skills/
 
 ## 💬 Example Prompts (How to Use the Agent)
 
-Once the agent or skills are loaded, try asking any of the following prompts (see [prompts/EXAMPLE_PROMPTS.md](prompts/EXAMPLE_PROMPTS.md) for the full 12-scenario cookbook with CLI flags and expected deliverables):
+Once the agent or skills are loaded, place your read-only starting `.mcm` inside `<working_dir>/MCM_template/<design>.mcm` (e.g. `C:\PDN_builde\MCM_template\`), set your `Working Folder` in `AIstudio` (or `SUBSTRATE_WORK_DIR`), and try any of the prompts below (see [TEMPLATE.md](TEMPLATE.md) and [prompts/EXAMPLE_PROMPTS.md](prompts/EXAMPLE_PROMPTS.md)):
 
 ### 🔹 1. Full-Package 24-Die, 76-Rail 27-Layer `.mcm` Build (`full_package_all_dies_pdn.py`)
-- *"I want to route VDDUC0..3, VDDCH0..3, VDDC0..3, SRAM0..3, and all 12 HBM rails across all 24 dies based on `@agent04_pdn_architect/MCM_test/PDN_test.mcm` and create a new `.mcm` file. Run the Stage 3 sandbox and DRC audit first, then proceed to Stage 4 `.mcm` creation."*
+- *"I want to route VDDUC0..3, VDDCH0..3, VDDC0..3, SRAM0..3, and all 12 HBM rails across all 24 dies based on `<working_dir>/MCM_template/<design>.mcm` and create a new `.mcm` file. Run the Stage 3 sandbox and DRC audit first, then proceed to Stage 4 `.mcm` creation."*
 - *"Run the full-package 24-die 27-layer PDN synthesis in sandbox mode (`--sandbox-only`), verify 0 via pad overlaps across all 27 conductor layers and unbroken `9F->5F` / `9B->5B` `VSS` and `VDD` continuity, and generate the 3 full-package Visual Gate SVGs."*
 
 ### 🔹 2. Quadrant / Corner Subset `.mcm` Build from `master.tag` (`upper_left_corner_pdn.py`)
-- *"Can you create another MCM based on `@agent04_pdn_architect/MCM_test/master.tag` only for 1 `VDDCH3` (`U1`), `VDDUC1` (`U5`), `VDDC1` and `SRAM1` (`U12`), and the `HBM` on the upper-left corner rails (`U13` / `MEM5`)? Run it in parallel in its own isolated output folder."*
-- *"Create a new `.mcm` based on `@agent04_pdn_architect/MCM_test/master.tag` for the entire upper-left quadrant including `U1` (`VDDCH3`), `U5` (`VDDUC1`), `U12` (`VDDC1` + `VDD_0P8_SRAM_CC1`), and all 3 upper-left HBM dies (`U13 MEM5`, `U14 MEM4`, `U15 MEM3`)."*
+- *"Can you create another MCM based on `<working_dir>/MCM_template/master.tag` only for 1 `VDDCH3` (`U1`), `VDDUC1` (`U5`), `VDDC1` and `SRAM1` (`U12`), and the `HBM` on the upper-left corner rails (`U13` / `MEM5`)? Run it in parallel in its own isolated output folder."*
+- *"Create a new `.mcm` based on `<working_dir>/MCM_template/master.tag` for the entire upper-left quadrant including `U1` (`VDDCH3`), `U5` (`VDDUC1`), `U12` (`VDDC1` + `VDD_0P8_SRAM_CC1`), and all 3 upper-left HBM dies (`U13 MEM5`, `U14 MEM4`, `U15 MEM3`)."*
 
 ### 🔹 3. Single-Rail `VDDUC*` & `VDDCH*` 27-Layer Flow (`vdduc_vddch_routing_flow`)
 - *"Use the `vdduc_vddch_routing_flow` skill to route the full 27-layer PDN for `U7` (`VDDUC0` and `VSS`) and `U2` (`VDDCH0` and `VSS`) with 100% `SURFACE` VIA, concentric `4FCO` `eDTC` stacks, unbroken `9F->5F` / `9B->5B` trunks, and `180°` alternating `CONDUCTOR/BASE` LSCs."*

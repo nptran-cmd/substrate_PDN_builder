@@ -1,171 +1,122 @@
-# Agent 04 (`pdn_architect`) — Input / Output JSON & Recipe Contract
+# User Prompt, Request & 27-Layer Config Templates (`substrate_PDN_builder`)
 
-## 1. Stage 1 (`Pre-Learn`) Request Schema
+Use these copy-paste templates in **AIstudio Prompt Composer**, **Jetski**, **Gemini CLI**, or the **27-Layer JSON Template Runner** so every team member gets consistent, working-folder-isolated results without touching the Git repo.
 
-```json
-{
-  "stage": "STAGE1_PRELEARN",
-  "stackup_file": "specs_and_docs/design_rules/Substrate Design Rules_gid_1425021083.csv",
-  "design_rule_files": [
-    "specs_and_docs/design_rules/Via Rules_gid_107930080.csv",
-    "specs_and_docs/design_rules/eDTC DR_gid_1708488908.csv",
-    "specs_and_docs/design_rules/BGALSC Rules_gid_2099350359.csv",
-    "specs_and_docs/design_rules/Substrate Design Rules_gid_1425021083.csv"
-  ],
-  "padstack_library_folder": "input_files/padstacks",
-  "mcm_path": "input_files/HH_Nguyen_2026-1023_1900_TO_v8.mcm",
-  "output_index_path": "agent04_pdn_architect/pdn_knowledge_index.json"
-}
-```
+> **Prerequisite:** Place your read-only starting `.mcm` inside `<working_dir>/MCM_template/<design>.mcm` and set `Working Folder` in `AIstudio` (or `$env:SUBSTRATE_WORK_DIR` / `export SUBSTRATE_WORK_DIR`) before running any template below.
 
-## 2. Stage 1 (`Pre-Learn`) Output Schema (`pdn_knowledge_index.json`)
+---
 
-```json
-{
-  "status": "SUCCESS",
-  "stage": "STAGE1_PRELEARN",
-  "stackup_zones": {
-    "ABOVE_BU": ["SURFACE", "C0", "12F", "11F", "10F", "9F", "8F", "7F", "6F", "5F"],
-    "ABOVE_PP": ["4FCO", "3FCI"],
-    "CORE": ["2FCI", "1FCI", "1BCI", "2BCI"],
-    "BELOW_PP": ["3BCI", "4BCO"],
-    "BELOW_BU": ["5B", "6B", "7B", "8B", "9B", "10B", "11B", "12B"],
-    "BASE": ["BASE"]
-  },
-  "edtc_layer": "4FCO",
-  "design_rules": {
-    "max_stacked_via_bu": 7,
-    "max_stacked_via_on_pth": 5,
-    "max_pp_vias_per_pth_pad": 2,
-    "pth_density_ids_per_mm2": 8.0,
-    "pth_density_ods_per_mm2": 3.5,
-    "pth_min_pitch_diff_net_um": 432.5,
-    "pth_min_pitch_same_net_um": 216.5,
-    "edtc_via_padstack": "V90_65_90",
-    "edtc_max_stacked_via": 2,
-    "edtc_vias_per_pad": 1,
-    "edtc_cavity_koz_um": 300.0,
-    "edtc_guard_metal_width_um": 150.0,
-    "edtc_allow_lsc_under_dtc": false,
-    "lsc_to_lsc_spacing_um": 175.0,
-    "lsc_sro_to_bga_sro_spacing_um": 500.0
-  },
-  "padstack_library_map": {
-    "CORE_PTH": ["V282_5_150_282_5_01A_2FCI_2BCI"],
-    "PP_VIA": ["V282_5_85_175_01A_L11_L12", "V175_85_282_5_01A_L12_L13", "V282_5_85_175_01A_L16_L17", "V175_85_282_5_01A_L17_L18"],
-    "BU_TO_PP_VIA": ["V90_65_121_01A_L10_L11", "V121_65_90_01A_L18_L19"],
-    "BU_UVIA": ["V90_65_90_01A_L09_L10", "V90_65_90_01A_L19_L20"],
-    "EDTC_VIA": ["V90_65_90_01A_L09_L10"],
-    "BGA_PAD": ["c560_35_01a"]
-  }
-}
+## 1. Universal User Request Template (Fill-in-the-Blank Prompt)
+
+Copy this block into `AIstudio` **Prompt Composer** (or your AI CLI), replace `<BRACKETED>` fields, and press **`Ctrl+Enter`**:
+
+```text
+Working Directory: <C:\PDN_builde or ~/pdn_workspaces>
+Source .mcm (read-only): <working_dir>/MCM_template/<design>.mcm
+Target Rail Group: <core | uncore | chiplet | hbm>
+Target RefDes & Nets: <e.g., U7 (VDDUC0 + VSS) | U9 (VDDC0 + VDD_0P8_SRAM_CC0 + VSS)>
+
+Task:
+1. Ensure Stage 1 CSVs exist in `<working_dir>/stage1_inputs/` (run `stage1_input_builder` first if missing).
+2. Run PDN synthesis (`pdn_8step_flow`) for steps `<all | 1..8>` with:
+   - Step 1 SURFACE ratio: <FULL | 4:2 | 5:2 | 3:1>, direction: <VERTICAL | HORIZONTAL | BOTH>
+   - Step 3 Core PTH: density `<7.0>` PTH/mm2, pattern `<STAGGERED | ORTHOGONAL_90DEG_VERTICAL | ORTHOGONAL_90DEG_HORIZONTAL>`, rule `<PKG0.8 | PKG0.1>`
+   - Step 4 Prepreg PP: pattern `<1_VIA_CENTER | 2_VIA_ON_PTH | 4_VIA_PER_PTH>`
+   - Step 5 BGA cluster: `<OPTION4_4VIA_CENTER_ZERO_OVERLAP | OPTION1_4VIA_SQUARE_2X2 | OPTION2_5VIA_QUINCUNX | OPTION3_6VIA_HEX_RING>`
+   - Step 6 BASE LSC: `CONDUCTOR/BASE`, `180°` cap-to-cap alternation, curved `LSC_CAVITY` recess rules
+3. Export XML-validated SVGs into `<working_dir>/pdn_sandbox/` and report DRC + zero-overlap audit counts.
+4. Sandbox only — do NOT build or overwrite `.mcm` until I review SVGs and explicitly approve Stage 4.
 ```
 
 ---
 
-## 3. Stage 2 & Stage 3 (`Synthesize + SVG Visual Sandbox`) Request Schema
+## 2. Ready-to-Use Rail Group Presets (Copy & Paste)
 
-```json
-{
-  "stage": "STAGE2_3_SANDBOX_SYNTHESIS",
-  "knowledge_index_path": "agent04_pdn_architect/pdn_knowledge_index.json",
-  "target_refdes": ["U1"],
-  "target_nets": ["VDDC0", "VSS", "VDDSRAM"],
-  "layer_polarity_map": {
-    "12F": "VSS",
-    "11F": "VDDC0",
-    "10F": "VSS",
-    "9F": "VDDC0",
-    "8F": "VSS",
-    "7F": "VDDSRAM",
-    "6F": "VSS",
-    "5F": "VDDC0",
-    "4FCO": "EDTC_MIXED",
-    "3FCI": "VDDC0",
-    "2FCI": "VSS",
-    "1FCI": "VDDC0",
-    "1BCI": "VSS",
-    "2BCI": "VDDC0",
-    "3BCI": "VSS",
-    "4BCO": "VDDC0",
-    "5B": "VSS",
-    "6B": "VDDC0",
-    "7B": "VSS",
-    "8B": "VDDC0",
-    "9B": "VSS",
-    "10B": "VDDC0",
-    "11B": "VSS",
-    "12B": "VDDC0"
-  },
-  "above_bu_strategy": {
-    "stack_mode": "STACKED_WITH_AUTO_STAGGER",
-    "max_stack_layers": 7,
-    "vdd_vss_via_ratio": 1.2
-  },
-  "edtc_4fco_strategy": {
-    "enabled": true,
-    "cavity_koz_um": 300.0,
-    "guard_metal_width_um": 150.0,
-    "max_stacked_via_on_pad": 2,
-    "vias_per_pad": 1
-  },
-  "core_pth_strategy": {
-    "case_mode": "CASE2",
-    "ids_density_per_mm2": 8.0,
-    "ods_density_per_mm2": 3.5,
-    "max_stacked_on_pth": 5,
-    "pp_vias_per_pth": 2
-  },
-  "below_bu_strategy": {
-    "mode": "BGA_CLUSTER_4_5",
-    "vias_per_cluster": 5,
-    "bga_cluster_profile": "GOOGLE_VER3"
-  },
-  "base_lsc_strategy": {
-    "enabled": true,
-    "cap_type": "0201",
-    "exclude_edtc_shadow": true
-  },
-  "svg_sandbox_dir": "agent04_pdn_architect/svg_sandbox",
-  "recipe_output_path": "agent04_pdn_architect/pdn_import_recipe.txt"
-}
+### Preset A — Uncore (`VDDUC0..3` on `U7, U5, U8, U6`)
+```text
+Use skills `uncore_vdduc_routing_flow` and `step1_surface_bump_routing`..`step8_transition_pp_core_connection`:
+Extract Stage 1 inputs from `<working_dir>/MCM_template/` if missing, then run all 8 PDN steps in sandbox mode for U7 (VDDUC0 + VSS) with SURFACE ratio 4:2 VERTICAL, Core PTH 7.0 PTH/mm2 STAGGERED (PKG0.8), PP 1_VIA_CENTER, BGA OPTION4_4VIA_CENTER_ZERO_OVERLAP, and BASE curved recess 180-deg LSCs. Export SVGs and audits into `<working_dir>/pdn_sandbox/`. Do not create a new .mcm yet.
+```
+
+### Preset B — Core Dual-Rail (`VDDC0 + VDD_0P8_SRAM_CC0` on `U9, U12, U88, U10`)
+```text
+Use skill `vddc_vddram_routing_flow` for U9 (VDDC0 + VDD_0P8_SRAM_CC0 + VSS):
+Synthesize all 8 steps across 27 layers using 3:1 vertical jog SURFACE strapping, carved W/E SRAM planes (>=50um BU / >=67.5um Core split gap), 10F SRAM bridge backbone, N24792-018 eDTC KOZ voids, and co-pocket CONDUCTOR/BASE 180-deg alternating LSCs. Save SVGs and audit JSON strictly inside `<working_dir>/pdn_sandbox/`.
+```
+
+### Preset C — Chiplet (`VDDCH0..3` on `U2, U4, U3, U1`)
+```text
+Use skill `chiplet_vddch_routing_flow` for U2 (VDDCH0 + VSS):
+Run Steps 1..8 in sandbox mode with SURFACE 5:2 HORIZONTAL, 6F VDD / 7F VSS frontside BU, 8.0 PTH/mm2 STAGGERED (PKG0.8), OPTION4_4VIA_CENTER_ZERO_OVERLAP BGA clusters, and curved BASE LSC_CAVITY placement. Verify 0 via pad overlaps across all 27 conductor layers and write outputs to `<working_dir>/pdn_sandbox/`.
+```
+
+### Preset D — `HBM4E` Multi-Rail (`VDDQ, VDDC, VDDQL, VPP, HBMPHY` on `U13..U24`)
+```text
+Use skills `hbm_vdd_routing_flow` and `emib_csb_and_hbm_surface_router` for U13 (MEM5 + U41 EMIB):
+Route West 21um fine-pitch paired rows with 84-90um SURFACE gang-bars, East EMIB bumps exclusively onto C0, 10F CSB lateral 8F dogbone escapes (<=2 stacked vias), 4-strip co-planar inner planes (VPP | VDDC | VDDQ | VDDQL5), and BASE LSCs outside the EMIB shadow. Export SVGs and DRC audits to `<working_dir>/pdn_sandbox/`.
 ```
 
 ---
 
-## 4. Stage 3 & Stage 4 Output Schema
+## 3. Direct CLI Parameter Template (`pdn_8step_flow`)
 
-```json
-{
-  "status": "SUCCESS",
-  "stage": "STAGE3_4_COMPLETE",
-  "target_refdes": ["U1"],
-  "target_nets": ["VDDC0", "VSS", "VDDSRAM"],
-  "zone_metrics": {
-    "zone1_above_bu_vias": 1420,
-    "zone1_actual_vdd_vss_ratio": 1.19,
-    "zone2_edtc_symbols_found": 2,
-    "zone2_edtc_landing_vias": 128,
-    "zone2_guard_metal_rings": 2,
-    "zone3_core_pth_count": 812,
-    "zone3_ids_achieved_density_per_mm2": 7.98,
-    "zone3_ods_achieved_density_per_mm2": 3.48,
-    "zone3_pp_vias_placed": 3248,
-    "zone3_diamond_star_clines": 1624,
-    "zone4_below_bu_strategy": "BGA_CLUSTER_4_5",
-    "zone4_below_bu_cluster_vias": 2150,
-    "zone5_base_empty_pockets": 4,
-    "zone5_lsc_placed": 24
-  },
-  "svg_sandbox_files": [
-    "agent04_pdn_architect/svg_sandbox/pdn_vertical_cross_section.svg",
-    "agent04_pdn_architect/svg_sandbox/zone1_above_bu_routing.svg",
-    "agent04_pdn_architect/svg_sandbox/zone2_4fco_edtc_guard.svg",
-    "agent04_pdn_architect/svg_sandbox/zone3_core_pth_ppvia.svg",
-    "agent04_pdn_architect/svg_sandbox/zone4_below_bu_clusters.svg",
-    "agent04_pdn_architect/svg_sandbox/zone5_base_lsc_pockets.svg"
-  ],
-  "recipe_file": "agent04_pdn_architect/pdn_import_recipe.txt",
-  "mcm_import_status": "IMPORTED_OK"
-}
+Run any step directly in PowerShell/Bash (or via **Direct** in `AIstudio`):
+
+```powershell
+# Set working directory first so all CSVs/SVGs/recipes isolate cleanly
+$env:SUBSTRATE_WORK_DIR = "C:\PDN_builde"   # Linux: export SUBSTRATE_WORK_DIR="$HOME/pdn_workspaces"
+
+# Step 0: Extract Stage 1 inputs from <working_dir>/MCM_template/*.mcm
+python -m agent04_pdn_architect.cad_cli.stage1_input_builder --work-dir "$env:SUBSTRATE_WORK_DIR"
+
+# Steps 1..8: Run any single step (--step 1..8) or full pipeline (--step all)
+python -m agent04_pdn_architect.cad_cli.pdn_8step_flow `
+  --rail-group uncore `
+  --step all `
+  --ratio 4:2 `
+  --direction VERTICAL `
+  --pth-density 7.0 `
+  --pth-pattern STAGGERED `
+  --pkg-rule PKG0.8 `
+  --pp-pattern 1_VIA_CENTER `
+  --bga-pattern OPTION4_4VIA_CENTER_ZERO_OVERLAP
+```
+
+---
+
+## 4. Designer-Editable 27-Layer JSON Config Templates
+
+Customize parameters directly in JSON before running a full 27-layer build:
+
+| Task | Domain / Rails | Template File |
+| :--- | :--- | :--- |
+| **Task 1** | Uncore `VDDUC*` & Chiplet `VDDCH*` | [`agent04_pdn_architect/templates/task1_vdduc_vddch_27layer_template.json`](agent04_pdn_architect/templates/task1_vdduc_vddch_27layer_template.json) |
+| **Task 2** | Core Dual-Rail `VDDC*` + `VDDSRAM` | [`agent04_pdn_architect/templates/task2_vddc_sram_27layer_template.json`](agent04_pdn_architect/templates/task2_vddc_sram_27layer_template.json) |
+| **Task 3** | `HBM4E` 4-Rail + `EMIB` | [`agent04_pdn_architect/templates/task3_hbm_4rail_27layer_template.json`](agent04_pdn_architect/templates/task3_hbm_4rail_27layer_template.json) |
+
+```powershell
+# Phase A: Mandatory Sandbox Validation + SVG Visual Gate (zero .mcm changes)
+python -m agent04_pdn_architect.templates.pdn_27layer_template_runner `
+  --config agent04_pdn_architect/templates/task1_vdduc_vddch_27layer_template.json `
+  --stage sandbox
+
+# Phase B: Final Confirmation Gate -> Build New Output .mcm
+python -m agent04_pdn_architect.templates.pdn_27layer_template_runner `
+  --config agent04_pdn_architect/templates/task1_vdduc_vddch_27layer_template.json `
+  --stage implement-mcm
+```
+
+---
+
+## 5. Stage 4 Pipe-Delimited Recipe Record Format (`pdn_import_recipe.txt`)
+
+Reference schema consumed by the O(1) `makeTable` Cadence SKILL batch importer (`pdn_import_from_txt_batch.il`):
+
+```text
+# AGENT04_PDN_RECIPE_V1|REFDES=U7|NETS=VDDUC0,VSS
+VIA|PADSTACK=V77_49_77_SURFACE_12F_01A|X=120.010|Y=0.000|NET=VDDUC0|START=SURFACE|END=12F|ZONE=STEP1_SURFACE
+CLINE|LAYER=CONDUCTOR/SURFACE|NET=VDDUC0|WIDTH=24.0|X1=0.000|Y1=0.000|X2=120.010|Y2=0.000|ZONE=STEP1_SURFACE
+EDTC_GUARD|LAYER=CONDUCTOR/2FCI|NET=VSS|WIDTH=150.0|X1=-2500.0|Y1=-2500.0|X2=2500.0|Y2=2500.0|SYM=EDTC_1
+KOZ|LAYER=CORE_ALL|TYPE=EDTC_CAVITY_300UM|X1=-2350.0|Y1=-2350.0|X2=2350.0|Y2=2350.0|SYM=EDTC_1
+LSC_SYM|REFDES=C_LSC_001|SYM=SM0201_690X390X550_01A|X=1200.000|Y=-800.000|ROT=0.0|MIRROR=NO|LAYER=BASE
 ```
